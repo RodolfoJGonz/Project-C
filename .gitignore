@@ -1,4 +1,7 @@
 venv/
 main/runs
 main/yolo11n.pt
+*.jpg
+*.png
+*.sh
 Chess Pieces 2.v5i.yolov11/
