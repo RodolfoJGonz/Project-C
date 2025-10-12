@@ -1,6 +1,7 @@
 venv/
 main/runs
 main/yolo11n.pt
+*.pt
 *.jpg
 *.png
 *.sh
