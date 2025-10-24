@@ -36,10 +36,14 @@ class Board():
 
         self.board = []
 
+        # keeping track of ghost pieces for en passant
+        self.white_ghost_piece = None
+        self.black_ghost_piece = None
+
         # Board set-up
         for i in range(8):
             self.board.append([None] * 8)
-        # White
+        # White Starting Positions
         self.board[7][0] = piece.Rook(True)
         self.board[7][1] = piece.Knight(True)
         self.board[7][2] = piece.Bishop(True)
@@ -52,7 +56,7 @@ class Board():
         for i in range(8):
             self.board[6][i] = piece.Pawn(True)
 
-        # Black
+        # Black Starting Positions
         self.board[0][0] = piece.Rook(False)
         self.board[0][1] = piece.Knight(False)
         self.board[0][2] = piece.Bishop(False)

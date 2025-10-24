@@ -1,6 +1,48 @@
 import board
 import piece
 
+# Mapping from YOLO labels to corresponding piece classes
+from piece import Pawn, Rook, Knight, Bishop, Queen, King
+
+labels_to_pieces = {
+    "white_pawn": lambda: Pawn(True),
+    "black_pawn": lambda: Pawn(False),
+    "white_rook": lambda: Rook(True),
+    "black_rook": lambda: Rook(False),
+    "white_knight": lambda: Knight(True),
+    "black_knight": lambda: Knight(False),
+    "white_bishop": lambda: Bishop(True),
+    "black_bishop": lambda: Bishop(False),
+    "white_queen": lambda: Queen(True),
+    "black_queen": lambda: Queen(False),
+    "white_king": lambda: King(True),
+    "black_king": lambda: King(False),
+}
+
+# helper function to convert YOLO Coordinates to board indices
+def map_yolo_to_board(x, y, frame_width, frame_height):
+    """
+    Converts YOLO (x, y) coordinates into the board indices (row, col) based
+    on the video frame size.
+    Assumes the camera view is fixed and the board fills the frame.
+    Can be calibrated further if needed.
+
+    """
+    square_width = frame_width / 8
+    square_height = frame_height / 8
+
+    col = int(x // square_width)
+    row = int(y // square_height)
+    
+    # Clamp values to be within board limits
+    row = max(0, min(7, row))
+    col = max(0, min(7, col))
+
+    return (row, col)
+
+
+
+
 class Chess():
     """
     A class to represent the game of chess.
@@ -37,6 +79,45 @@ class Chess():
 
         self.white_ghost_piece = None
         self.black_ghost_piece = None
+
+    def update_board_from_yolo(self, detections, frame_width, frame_height):
+        """
+        Updates the board state based on YOLO detections.
+
+        detections : list of dict
+            Each dict contains 'label', 'x', 'y' keys representing detected pieces and their positions.
+
+            detections example:
+            [
+                {'label': 'white_pawn', 'x': 100, 'y': 150},
+                {'label': 'black_queen', 'x': 300, 'y': 450},
+                ...
+            ]
+        """
+
+        # Clear the board
+        for i in range(8):
+            for j in range(8):
+                self.board.board[i][j] = None
+        
+        # Place pieces based on detections
+        for det in detections:
+            label = det["label"]
+            x , y = det["x"], det["y"]
+
+            if label not in labels_to_pieces:
+                print(f"Unknown label: {label}")
+                continue
+        
+        # Convert YOLO coordinates to board indices
+            row, col = map_yolo_to_board(x, y, frame_width, frame_height)
+
+        #Create piece instance and place it on the board
+            piece_obj = labels_to_pieces[label]()
+            self.board.board[row][col] = piece_obj
+        
+    print("Board updated from YOLO detections.")
+
 
     def promotion(self, pos):
         pawn = None
