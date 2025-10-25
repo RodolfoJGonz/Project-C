@@ -1,4 +1,5 @@
-#this is a first attempt to run a video with our trained model
+
+#sample code to check if the models are working on videos. 
 
 from ultralytics import YOLO   
 import cv2
