@@ -1,22 +1,34 @@
-import board
-import piece
+from . import board
+from . import piece
+from typing import Tuple, Optional
+
+
+"""
+
+This file is in charge of
+Bridging YOLO detections → board updates,
+manage turns,
+promotions,
+& tying everything together.
+
+"""
 
 # Mapping from YOLO labels to corresponding piece classes
-from piece import Pawn, Rook, Knight, Bishop, Queen, King
+from .piece import Pawn, Rook, Knight, Bishop, Queen, King
 
 labels_to_pieces = {
-    "white_pawn": lambda: Pawn(True),
-    "black_pawn": lambda: Pawn(False),
-    "white_rook": lambda: Rook(True),
-    "black_rook": lambda: Rook(False),
-    "white_knight": lambda: Knight(True),
-    "black_knight": lambda: Knight(False),
-    "white_bishop": lambda: Bishop(True),
-    "black_bishop": lambda: Bishop(False),
-    "white_queen": lambda: Queen(True),
-    "black_queen": lambda: Queen(False),
-    "white_king": lambda: King(True),
-    "black_king": lambda: King(False),
+    "white-pawn": lambda: Pawn(True),
+    "black-pawn": lambda: Pawn(False),
+    "white-rook": lambda: Rook(True),
+    "black-rook": lambda: Rook(False),
+    "white-knight": lambda: Knight(True),
+    "black-knight": lambda: Knight(False),
+    "white-bishop": lambda: Bishop(True),
+    "black-bishop": lambda: Bishop(False),
+    "white-queen": lambda: Queen(True),
+    "black-queen": lambda: Queen(False),
+    "white-king": lambda: King(True),
+    "black-king": lambda: King(False),
 }
 
 # helper function to convert YOLO Coordinates to board indices
@@ -40,6 +52,133 @@ def map_yolo_to_board(x, y, frame_width, frame_height):
 
     return (row, col)
 
+
+Coord = Tuple[int, int]
+
+
+# Helpers that check for valid moves
+
+def find_king(board, color: bool) -> Optional[Coord]:
+    """
+    Find the (row, col) of the king of the given color on this board.
+    color = True for white, False for black.
+    Returns None if not found.
+    """
+    for r in range(8):
+        for c in range(8):
+            p = board.board[r][c]
+            if p is None:
+                continue
+            if p.name.upper() == "K" and p.color == color:
+                return (r, c)
+    return None
+
+
+def is_square_attacked(board, target: Coord, by_white: bool) -> bool:
+    """
+    Return True if the square `target` is attacked by any piece
+    of the given color (by_white == True for white, False for black).
+
+    This uses each piece's movement rules to approximate "attack squares".
+    Pawns and kings are handled slightly specially.
+    """
+    tr, tc = target
+
+    for r in range(8):
+        for c in range(8):
+            p = board.board[r][c]
+            if p is None:
+                continue
+            if p.color != by_white:
+                continue
+
+            name = p.name.upper()
+
+            # Special handling for pawns: they attack diagonally forward
+            if name == "P":
+                direction = -1 if p.color else 1  # white: up, black: down
+                # squares this pawn attacks
+                attack_squares = [
+                    (r + direction, c - 1),
+                    (r + direction, c + 1),
+                ]
+                if target in attack_squares:
+                    # also ensure target is on board
+                    if 0 <= tr < 8 and 0 <= tc < 8:
+                        return True
+                continue
+
+            # Kings attack all adjacent squares
+            if name == "K":
+                if abs(tr - r) <= 1 and abs(tc - c) <= 1 and not (tr == r and tc == c):
+                    return True
+                continue
+
+            # For other pieces (rook, bishop, queen, knight),
+            # we can reuse their is_valid_move logic.
+            if p.is_valid_move(board, (r, c), target):
+                return True
+
+    return False
+
+def is_in_check(board, color: bool) -> bool:
+    """
+    Return True if the king of `color` is in check on this board.
+    color = True for white, False for black.
+    """
+    king_pos = find_king(board, color)
+    if king_pos is None:
+        # No king found: treat as "in check" / invalid position
+        return True
+
+    # If any enemy piece attacks the king square, it's check
+    return is_square_attacked(board, king_pos, by_white=not color)
+
+from typing import Tuple, Optional
+
+Coord = Tuple[int, int]
+
+def infer_move(prev_board, new_board):
+    """
+    Very simple move inference:
+    - looks for one square where a piece disappeared  -> start
+    - one square where a piece appeared/changed -> end
+
+    Assumes: exactly one move between the two positions.
+    Returns (start, end) or (None, None) if ambiguous.
+    """
+    from_squares = []
+    to_squares = []
+
+    for r in range(8):
+        for c in range(8):
+            p_prev = prev_board[r][c]
+            p_new = new_board[r][c]
+
+            # no change
+            if p_prev is None and p_new is None:
+                continue
+
+            # piece disappeared -> candidate "from"
+            if p_prev is not None and p_new is None:
+                from_squares.append((r, c))
+                continue
+
+            # piece appeared on an empty square -> candidate "to"
+            if p_prev is None and p_new is not None:
+                to_squares.append((r, c))
+                continue
+
+            # both not None but changed (capture, promotion, etc.)
+            if p_prev is not None and p_new is not None:
+                if (p_prev.color != p_new.color) or (p_prev.name != p_new.name):
+                    to_squares.append((r, c))
+
+    if len(from_squares) == 1 and len(to_squares) == 1:
+        return from_squares[0], to_squares[0]
+
+    print("Could not infer a single move. from_squares=", from_squares, "to_squares=", to_squares)
+    return None, None
 
 
 
@@ -80,19 +219,140 @@ class Chess():
         self.white_ghost_piece = None
         self.black_ghost_piece = None
 
+    def is_sane_state(self) -> bool:
+        """
+        Check if the current board state satisfies basic sanity rules:
+
+        i)   Exactly one king per color.
+        ii)  Kings are not on adjacent squares.
+        iii) Total number of pieces per color <= 16.
+        iv)  Pawns per color <= 8.
+        v)   No pawn on the first or last rank (rows 0 or 7).
+
+        This does NOT guarantee the position is reachable from a real game,
+        but it filters out obviously impossible states (good for YOLO).
+        """
+
+        white_pieces = 0
+        black_pieces = 0
+        white_pawns = 0
+        black_pawns = 0
+
+        white_king_pos = None
+        black_king_pos = None
+        white_king_count = 0
+        black_king_count = 0
+
+        for r in range(8):
+            for c in range(8):
+                p = self.board.board[r][c]
+                if p is None:
+                    continue
+
+                is_white = p.color
+                name = p.name.upper()   # just in case
+
+                # Count total pieces per color (rule iii)
+                if is_white:
+                    white_pieces += 1
+                else:
+                    black_pieces += 1
+
+                # Pawn-related checks (rules iv and v)
+                if name == "P":
+                    if is_white:
+                        white_pawns += 1
+                    else:
+                        black_pawns += 1
+
+                    # rule v: no pawn on first or last rank
+                    if r == 0 or r == 7:
+                        print(f"Invalid: pawn on rank {r} at {(r, c)}")
+                        return False
+
+                # King tracking (rule i)
+                if name == "K":
+                    if is_white:
+                        white_king_count += 1
+                        white_king_pos = (r, c)
+                    else:
+                        black_king_count += 1
+                        black_king_pos = (r, c)
+
+        # rule i: exactly one king per color
+        if white_king_count != 1 or black_king_count != 1:
+            print(f"Invalid: white_king_count={white_king_count}, black_king_count={black_king_count}")
+            return False
+
+        # rule ii: kings not on adjacent squares
+        wr, wc = white_king_pos
+        br, bc = black_king_pos
+        if abs(wr - br) <= 1 and abs(wc - bc) <= 1:
+            print("Invalid: kings are on adjacent squares.")
+            return False
+
+        # rule iii: total pieces per color <= 16
+        if white_pieces > 16 or black_pieces > 16:
+            print(f"Invalid: too many pieces. white={white_pieces}, black={black_pieces}")
+            return False
+
+        # rule iv: pawns per color <= 8
+        if white_pawns > 8 or black_pawns > 8:
+            print(f"Invalid: too many pawns. white_pawns={white_pawns}, black_pawns={black_pawns}")
+            return False
+
+        # If we reach here, all sanity checks passed
+        return True
+    def is_legal_move(self, start: Coord, end: Coord) -> bool:
+        """
+        Check if moving the piece at `start` to `end` is a legal move
+        in the current position, for the current board.
+
+        This checks:
+        - there is a piece at `start`
+        - the piece's own movement rules allow the move
+        - the move does NOT leave that piece's own king in check
+        (i.e., you don't move into/through check).
+
+        Still missing:
+        - checks for the player's turn
+        - en passant rules
+
+        """
+        r1, c1 = start
+        r2, c2 = end
+
+        # 1) Is there a piece at start?
+        piece = self.board.board[r1][c1]
+        if piece is None:
+            return False
+
+        # 2) Basic movement rules for that piece
+        if not piece.is_valid_move(self.board, start, end):
+            return False
+
+        # 3) Simulate the move on a temporary board and check king safety
+        import copy
+        temp_board = copy.deepcopy(self.board)
+
+        # Apply move on temp_board
+        temp_board.board[r2][c2] = temp_board.board[r1][c1]
+        temp_board.board[r1][c1] = None
+
+        # If after this move our own king is in check, it's illegal
+        if is_in_check(temp_board, piece.color):
+            return False
+
+        return True
+
+
+
     def update_board_from_yolo(self, detections, frame_width, frame_height):
         """
         Updates the board state based on YOLO detections.
 
         detections : list of dict
             Each dict contains 'label', 'x', 'y' keys representing detected pieces and their positions.
-
-            detections example:
-            [
-                {'label': 'white_pawn', 'x': 100, 'y': 150},
-                {'label': 'black_queen', 'x': 300, 'y': 450},
-                ...
-            ]
         """
 
         # Clear the board
@@ -103,21 +363,59 @@ class Chess():
         # Place pieces based on detections
         for det in detections:
             label = det["label"]
-            x , y = det["x"], det["y"]
+            x, y = det["x"], det["y"]
 
             if label not in labels_to_pieces:
                 print(f"Unknown label: {label}")
                 continue
         
-        # Convert YOLO coordinates to board indices
+            # Convert YOLO coordinates to board indices
             row, col = map_yolo_to_board(x, y, frame_width, frame_height)
 
-        #Create piece instance and place it on the board
+            # Create piece instance and place it on the board
             piece_obj = labels_to_pieces[label]()
             self.board.board[row][col] = piece_obj
         
-    print("Board updated from YOLO detections.")
+        # ---- NEW: sanity check on resulting board state ----
+        if not self.is_sane_state():
+            print("⚠ Warning: YOLO-produced board state failed sanity checks.")
+            return False
+        else:
+            print("Board updated from YOLO detections (sane state).")
+            return True
 
+        
+
+    def initialize_from_yolo_start(self, detections, frame_width, frame_height):
+        """
+        Initializes the chess board from YOLO detections.
+        Expects all 32 pieces to be visible in their starting positions.
+        """
+
+        detected_pieces = []
+        for det in detections:
+            label = det["label"].replace("_", "-")
+            x, y = det["x"], det["y"]
+
+            if label not in labels_to_pieces:
+                print(f"Unknown label: {label}")
+                continue
+
+            row, col = map_yolo_to_board(x, y, frame_width, frame_height)
+            detected_pieces.append(((row, col), label))
+
+        piece_count = len(detected_pieces)
+        if piece_count < 32:
+            print(f"Only {piece_count} pieces detected. Waiting for full board...")
+            return False
+
+        # Build the board using YOLO data
+        for (row, col), label in detected_pieces:
+            piece_obj = labels_to_pieces[label]()
+            self.board.board[row][col] = piece_obj
+
+        print("Chessboard initialized from YOLO detections.")
+        return True
 
     def promotion(self, pos):
         pawn = None
@@ -262,3 +560,50 @@ if __name__ == "__main__":
             i += 1
 
         chess.board.print_board()
+
+def build_detected_board(detections, frame_width, frame_height):
+    """
+    Build and return an 8x8 board snapshot from YOLO detections
+    WITHOUT mutating the real self.board.board.
+    """
+    # start with empty 8x8
+    detected = [[None for _ in range(8)] for _ in range(8)]
+
+    for det in detections:
+        label = det.get("label")
+        x = det.get("x")
+        y = det.get("y")
+        if label not in labels_to_pieces or x is None or y is None:
+            continue
+
+        r, c = map_yolo_to_board(x, y, frame_width, frame_height)
+        piece_obj = labels_to_pieces[label]()
+        detected[r][c] = piece_obj
+
+    return detected
+def infer_simple_move(prev_board, detected_board):
+    """
+    Given two 8x8 arrays of Piece-or-None, try to infer one move (start, to).
+    Returns (start, to) or (None, None) if not inferable.
+
+    Heuristic:
+    - Find exactly one square that went from piece -> None  (start)
+    - Find exactly one square that went from None  -> piece (to)
+    - If both exist, return them.
+    """
+    starts = []
+    tos = []
+    for r in range(8):
+        for c in range(8):
+            a = prev_board[r][c]
+            b = detected_board[r][c]
+            if a is not None and b is None:
+                starts.append((r, c, a))
+            elif a is None and b is not None:
+                tos.append((r, c, b))
+
+    if len(starts) == 1 and len(tos) == 1:
+        (rs, cs, _) = starts[0]
+        (rt, ct, _) = tos[0]
+        return ( (rs, cs), (rt, ct) )
+    return (None, None)
