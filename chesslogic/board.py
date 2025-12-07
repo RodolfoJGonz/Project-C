@@ -1,4 +1,4 @@
-import piece
+from . import piece
 
 class Board():
     """
@@ -69,29 +69,23 @@ class Board():
         for i in range(8):
             self.board[1][i] = piece.Pawn(False)
 
-
     def print_board(self):
         """
-        Prints the current state of the board.
+        Print a simple ASCII representation of the board.
+        Empty squares are printed as '.', pieces use their __str__()
+        which already encodes color where appropriate.
         """
-
-        buffer = ""
-        for i in range(33):
-            buffer += "*"
-        print(buffer)
-        for i in range(len(self.board)):
-            tmp_str = "|"
-            for j in self.board[i]:
-                if j == None or j.name == 'GP':
-                    tmp_str += "   |"
-                elif len(j.name) == 2:
-                    tmp_str += (" " + str(j) + "|")
+        for r in range(8):
+            row_elems = []
+            for c in range(8):
+                p = self.board[r][c]
+                if p is None:
+                    row_elems.append('.')
                 else:
-                    tmp_str += (" " + str(j) + " |")
-            print(tmp_str)
-        buffer = ""
-        for i in range(33):
-            buffer += "*"
-        print(buffer)
+                    # rely on Piece.__str__ for color-aware text
+                    row_elems.append(str(p))
+            print(' '.join(row_elems))
+
+
 
 

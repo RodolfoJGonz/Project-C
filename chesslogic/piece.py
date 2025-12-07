@@ -1,6 +1,13 @@
 blocked_path = "There's a piece in the path."
 incorrect_path = "This piece does not move in this pattern."
 
+"""
+This file contains the classes representing the pieces in chess
+and helper functions to check for threats on the board.
+
+"""
+
+
 
 def check_knight(color, board, pos):
     """
@@ -18,10 +25,10 @@ def check_knight(color, board, pos):
 
     Precondition `pos` is a valid position on the board.
     """
-    piece = board.board[pos[0]][pos[1]]
-    if piece != None and piece.color != color and piece.name == 'N':
-        return False
-    return True
+    piece = board.board[pos[0]][pos[1]] # get piece at position 
+    if piece != None and piece.color != color and piece.name == 'N': # check if it's an opposite color knight
+        return False # threat detected
+    return True # no threat detected
 
 
 def check_diag_castle(color, board, start, to): 
