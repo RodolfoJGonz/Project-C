@@ -2,6 +2,18 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 import matplotlib.pyplot as plt
+import sys
+sys.path.insert(0, '../chesslogic')
+
+from chess_integration import (
+    create_initial_board,
+    create_empty_board,
+    identify_piece_from_board,
+    move_piece,
+    notation_to_indices,
+    labels_to_pieces,
+    initialize_board_from_detections
+)
 
 
 # ============================================
@@ -32,9 +44,13 @@ def visualize_on_original(original, bboxes, assigned_centers_orig, final_pieces)
         cx, cy = map(int, assigned_centers_orig[i])
         cv2.line(vis, (bx, by), (cx, cy), (200, 200, 200), 2)
         cv2.circle(vis, (cx, cy), 6, color_center, -1)
+        
+        piece_name = p.get('piece_name', 'Unknown')
+        label = f"{p['notation']} {piece_name} {p['conf']:.2f}"
+        
         cv2.putText(
             vis,
-            f"{p['notation']} {p['conf']:.2f}",
+            label,
             (cx + 8, cy - 6),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
@@ -53,6 +69,19 @@ def visualize_on_original(original, bboxes, assigned_centers_orig, final_pieces)
 # ============================================
 
 PADDING = 0.1
+chess_board = None
+piece_mapping = {}
+piece_tracker = {}
+starting_positions = {}
+current_board_state = {}
+reference_board_state = {}
+
+move_history = []
+current_turn = 1
+current_player = "white"
+frame_count = 0
+video_fps = 30
+move_frame_count = 0
 
 
 def point_in_quad(point, quad):
@@ -64,7 +93,7 @@ def point_in_quad(point, quad):
 
     quad = quad.astype(np.int32)
     result = cv2.pointPolygonTest(quad, point, False)
-    return result >= 0  # inside or on edge
+    return result >= 0
 
 
 def order_points(pts):
@@ -94,7 +123,6 @@ def detect_corners(frame, model, shrink_percent=0.0):
     if len(boxes) < 4:
         return None
 
-    # Compute areas and take the 4 largest boxes
     xyxy = boxes.xyxy.cpu().numpy()
     areas = (xyxy[:, 2] - xyxy[:, 0]) * (xyxy[:, 3] - xyxy[:, 1])
 
@@ -103,11 +131,8 @@ def detect_corners(frame, model, shrink_percent=0.0):
 
     corners = order_points(points)
 
-    # Optional: shrink corners toward center to avoid clipping
     if shrink_percent > 0:
-        # Find center point
         center = np.mean(corners, axis=0)
-        # Move each corner toward center by shrink_percent
         corners = corners + (center - corners) * shrink_percent
 
     return corners
@@ -121,7 +146,6 @@ def four_point_transform(frame, pts, padding_percent=PADDING):
     rect = order_points(pts)
     (tl, tr, br, bl) = rect
 
-    # Compute width and height
     widthA = np.linalg.norm(br - bl)
     widthB = np.linalg.norm(tr - tl)
     maxWidth = max(int(widthA), int(widthB))
@@ -130,11 +154,9 @@ def four_point_transform(frame, pts, padding_percent=PADDING):
     heightB = np.linalg.norm(tl - bl)
     maxHeight = max(int(heightA), int(heightB))
 
-    # Add padding to prevent clipping edge pieces
     padding_w = int(maxWidth * padding_percent)
     padding_h = int(maxHeight * padding_percent)
 
-    # Adjust destination points to include padding
     dst = np.array(
         [
             [padding_w, padding_h],
@@ -145,14 +167,12 @@ def four_point_transform(frame, pts, padding_percent=PADDING):
         dtype="float32",
     )
 
-    # Output size includes padding on all sides
     output_width = maxWidth + 2 * padding_w
     output_height = maxHeight + 2 * padding_h
 
     M = cv2.getPerspectiveTransform(rect, dst)
     warped = cv2.warpPerspective(frame, M, (output_width, output_height))
 
-    # Return padding info for downstream use
     padding_info = {
         "padding_percent": padding_percent,
         "padding_w": padding_w,
@@ -168,7 +188,6 @@ def create_grid_overlay(frame, grid_size=8, padding_percent=PADDING):
     """
     h, w = frame.shape[:2]
 
-    # Calculate padding in pixels consistent with get_square_centers
     padding_h = h * padding_percent / (1 + 2 * padding_percent)
     padding_w = w * padding_percent / (1 + 2 * padding_percent)
 
@@ -184,12 +203,9 @@ def create_grid_overlay(frame, grid_size=8, padding_percent=PADDING):
         x = int(padding_w + i * square_w)
         y = int(padding_h + i * square_h)
 
-        # Vertical lines
         cv2.line(overlay, (x, int(padding_h)), (x, int(h - padding_h)), (0, 255, 0), 2)
-        # Horizontal lines
         cv2.line(overlay, (int(padding_w), y), (int(w - padding_w), y), (0, 255, 0), 2)
 
-    # Draw border around actual board area
     cv2.rectangle(
         overlay,
         (int(padding_w), int(padding_h)),
@@ -252,11 +268,9 @@ def get_square_centers(warp, grid_size=8, padding_percent=PADDING):
     """
     h, w = warp.shape[:2]
 
-    # Calculate padding in pixels
     padding_h = h * padding_percent / (1 + 2 * padding_percent)
     padding_w = w * padding_percent / (1 + 2 * padding_percent)
 
-    # Board dimensions (excluding padding)
     board_h = h - 2 * padding_h
     board_w = w - 2 * padding_w
 
@@ -294,10 +308,95 @@ def snap_to_square_nearest(x1, y1, x2, y2, centers, use_bottom_center=True):
 
 
 def coords_to_notation(row, col):
-    """Convert grid coordinates to chess notation (e.g., row=0, col=4 -> 'e8')"""
-    files = "abcdefgh"
+    """Convert grid coordinates to chess notation"""
+    files = "hgfedcba"
     ranks = "87654321"
-    return f"{files[col]}{ranks[row]}"
+    return f"{files[row]}{ranks[col]}"
+
+
+def visualize_chessboard_grid():
+    """
+    Print the chessboard coordinate grid in terminal for reference.
+    Shows the mapping between (row, col) indices and chess notation.
+    Row = File (h-a), Col = Rank (8-1)
+    """
+    files = "hgfedcba"
+    ranks = "87654321"
+    
+    print("\n" + "="*70)
+    print("CHESSBOARD COORDINATE GRID - [row, col] = notation")
+    print("="*70)
+    print("Structure: Row = File (h,g,f,e,d,c,b,a), Col = Rank (8,7,6,5,4,3,2,1)\n")
+    
+    print("         Col:  0   1   2   3   4   5   6   7")
+    print("              Rank: 8   7   6   5   4   3   2   1")
+    print("         " + "-"*52)
+    
+    for row in range(8):
+        file_label = files[row]
+        tmp_str = f"Row {row} (file {file_label}): |"
+        for col in range(8):
+            notation = coords_to_notation(row, col)
+            tmp_str += f" {notation} |"
+        print(tmp_str)
+    
+    print("         " + "-"*52)
+    print("\nKey mappings:")
+    print("  - Row 0 = File h (leftmost column)")
+    print("  - Row 7 = File a (rightmost column)")
+    print("  - Col 0 = Rank 8 (black back rank)")
+    print("  - Col 7 = Rank 1 (white back rank)")
+    print("\nExample starting positions:")
+    print("  - White pawns: [0-7][6] = h2, g2, f2, e2, d2, c2, b2, a2")
+    print("  - White King: [3][7] = e1")
+    print("  - White Queen: [4][7] = d1")
+    print("  - Black pawns: [0-7][1] = h7, g7, f7, e7, d7, c7, b7, a7")
+    print("  - Black King: [3][0] = e8")
+    print("  - Black Queen: [4][0] = d8")
+    print("="*70 + "\n")
+
+
+def visualize_detected_pieces(detected_pieces):
+    """
+    Visualize detected pieces on a text-based chessboard grid.
+    
+    Args:
+        detected_pieces: list of dicts with 'row', 'col', and optional 'piece_name'
+    """
+    files = "hgfedcba"
+    ranks = "87654321"
+    
+    board = [['.' for _ in range(8)] for _ in range(8)]
+    
+    for piece in detected_pieces:
+        row = piece.get('row')
+        col = piece.get('col')
+        piece_name = piece.get('piece_name', '?')
+        
+        if 0 <= row < 8 and 0 <= col < 8:
+            if piece_name == "Unknown":
+                board[row][col] = '?'
+            else:
+                board[row][col] = 'P'
+    
+    print("\n" + "="*50)
+    print("DETECTED PIECES ON BOARD")
+    print("="*50)
+    print("\nFiles (left to right): h g f e d c b a")
+    print("Ranks (top to bottom):  8 7 6 5 4 3 2 1\n")
+    
+    print("  " + "  ".join(files))
+    print("  " + "-"*23)
+    
+    for row in range(8):
+        tmp_str = f"{ranks[row]}|"
+        for col in range(8):
+            tmp_str += f" {board[row][col]} "
+        print(tmp_str)
+    
+    print("  " + "-"*23)
+    print("\nLegend: P = Piece detected, ? = Unknown, . = Empty")
+    print("="*50 + "\n")
 
 
 # ============================================
@@ -310,7 +409,6 @@ def apply_chess_rules(pieces, mode="starting_position"):
     Apply chess rules to clean up predictions.
     Keeps highest-confidence piece per square and optionally apply stricter starting-position rules.
     """
-    # RULE 1: One piece per square
     square_map = {}
     for p in pieces:
         key = (p["row"], p["col"])
@@ -335,10 +433,8 @@ def apply_starting_position_rules(pieces):
     Apply strict rules for starting chess positions.
     NOTE: this function is small and conservative — adapt to your dataset.
     """
-    # Example: keep pieces in first two or last two rows only (this is optional)
     cleaned = []
     for p in pieces:
-        # keep everything by default; user can modify rules here
         cleaned.append(p)
     return cleaned
 
@@ -346,6 +442,242 @@ def apply_starting_position_rules(pieces):
 # ============================================
 # UPDATED model_detect (main integration)
 # ============================================
+
+
+def initialize_piece_tracker(detected_pieces, board):
+    """
+    Initialize piece tracker on first frame.
+    Maps each detected piece to its piece type based on board state.
+    Each piece keeps its type label as it moves.
+    """
+    global piece_tracker, starting_positions, reference_board_state
+    
+    piece_tracker = {}
+    starting_positions = {}
+    reference_board_state = {}
+    
+    print(f"\n[INIT TRACKER] Detected pieces: {detected_pieces}")
+    for notation in detected_pieces:
+        piece_info = identify_piece_from_board(board, notation)
+        if piece_info:
+            piece_color = "white" if piece_info['color'] == "white" else "black"
+            piece_type = piece_info['type']
+            piece_label = f"{piece_color}_{piece_type.lower()}"
+            piece_tracker[notation] = piece_label
+            starting_positions[notation] = piece_label
+            reference_board_state[notation] = piece_label
+            print(f"  {notation}: {piece_label}")
+        else:
+            print(f"  {notation}: FAILED to identify from board")
+
+
+def record_move(from_notation, to_notation, piece_label, action="move", frame_num=0):
+    """
+    Record a move to move_history in the required JSON format.
+    piece_label: "white_pawn", "black_queen", etc.
+    action: "move" or "capture"
+    frame_num: frame number to calculate timestamp
+    """
+    global current_turn, current_player, move_history, video_fps
+    
+    if not piece_label or piece_label == "Unknown":
+        return
+    
+    parts = piece_label.split('_')
+    if len(parts) != 2:
+        return
+    
+    color, piece_type = parts[0], parts[1]
+    
+    seconds = frame_num / video_fps if video_fps > 0 else 0
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    timestamp = f"{minutes:02d}:{secs:02d}:{millis:03d}"
+    
+    move_record = {
+        "turn": current_turn,
+        "color": color,
+        "piece": piece_type,
+        "from": from_notation,
+        "to": to_notation,
+        "action": action,
+        "timestamp": timestamp
+    }
+    
+    move_history.append(move_record)
+
+
+def update_piece_tracker(detected_pieces, prev_detected_pieces, frame_num=0):
+    """
+    Update piece tracker based on detected piece movements.
+    Keeps track of which starting position each current piece came from.
+    Records moves to move_history.
+    frame_num: current frame number for timestamp calculation
+    """
+    global piece_tracker, current_turn, current_player, frame_count
+    
+    if prev_detected_pieces is None or len(prev_detected_pieces) == 0:
+        return
+    
+    disappeared = set(prev_detected_pieces) - set(detected_pieces)
+    appeared = set(detected_pieces) - set(prev_detected_pieces)
+    
+    print(f"  Disappeared: {disappeared}, Appeared: {appeared}")
+    
+    if len(disappeared) == 1 and len(appeared) == 1:
+        from_notation = list(disappeared)[0]
+        to_notation = list(appeared)[0]
+        
+        print(f"\n[MOVE DETECT] {from_notation} → {to_notation}")
+        print(f"  piece_tracker: {piece_tracker}")
+        print(f"  starting_positions: {starting_positions}")
+        
+        from_indices = notation_to_indices(from_notation)
+        to_indices = notation_to_indices(to_notation)
+        
+        if from_indices and to_indices:
+            piece = chess_board.board[from_indices[0]][from_indices[1]]
+            if piece:
+                try:
+                    if piece.is_valid_move(chess_board, from_indices, to_indices):
+                        target_piece = chess_board.board[to_indices[0]][to_indices[1]]
+                        is_capture = target_piece is not None and target_piece.name != 'GP'
+                        
+                        chess_board.board[to_indices[0]][to_indices[1]] = piece
+                        chess_board.board[from_indices[0]][from_indices[1]] = None
+                        
+                        piece_origin = None
+                        
+                        if from_notation in piece_tracker:
+                            piece_origin = piece_tracker[from_notation]
+                            piece_tracker[to_notation] = piece_origin
+                            del piece_tracker[from_notation]
+                            print(f"  ✓ Updated from piece_tracker: {piece_origin}")
+                        elif from_notation in starting_positions:
+                            piece_origin = starting_positions[from_notation]
+                            piece_tracker[to_notation] = piece_origin
+                            print(f"  ✓ Updated from starting_positions: {piece_origin}")
+                        else:
+                            print(f"  ✗ NOT in piece_tracker or starting_positions!")
+                        
+                        if piece_origin and from_notation in starting_positions:
+                            del starting_positions[from_notation]
+                            starting_positions[to_notation] = piece_origin
+                        
+                        if piece_origin:
+                            action = "capture" if is_capture else "move"
+                            record_move(from_notation, to_notation, piece_origin, action, frame_num)
+                            
+                            if current_player == "white":
+                                current_player = "black"
+                            else:
+                                current_player = "white"
+                                current_turn += 1
+                except Exception as e:
+                    print(f"  ✗ Exception during move validation: {e}")
+                    pass
+    else:
+        if prev_detected_pieces is not None:
+            print(f"  ✗ Move condition not met: need exactly 1 disappeared and 1 appeared")
+
+
+def save_move_history(output_file="../output/moves.json"):
+    """
+    Save move_history to a JSON file.
+    """
+    global move_history
+    
+    import json
+    import os
+    
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    try:
+        with open(output_file, 'w') as f:
+            json.dump(move_history, f, indent=2)
+        print(f"✓ Move history saved to {output_file}")
+        print(f"  Total moves recorded: {len(move_history)}")
+    except Exception as e:
+        print(f"✗ Failed to save move history: {e}")
+
+
+def frame_diff_labeling(detected_notations, frame_num):
+    """
+    Frame-diffing approach: compare current frame to reference board state.
+    When a piece disappears from reference and a new piece appears, label the new piece.
+    
+    Args:
+        detected_notations: List of piece notations detected in current frame (e.g., ['e4', 'c2'])
+        frame_num: Current frame number
+    
+    Returns:
+        Dictionary mapping notation -> piece_label for all detected pieces
+    """
+    global reference_board_state, current_board_state, starting_positions, piece_tracker
+    global chess_board, current_turn, current_player, move_history
+    
+    current_detected = set(detected_notations)
+    reference_detected = set(reference_board_state.keys())
+    
+    disappeared = reference_detected - current_detected
+    appeared = current_detected - reference_detected
+    
+    new_labels = dict(reference_board_state)
+    
+    if len(disappeared) == 1 and len(appeared) == 1:
+        from_notation = list(disappeared)[0]
+        to_notation = list(appeared)[0]
+        
+        print(f"\n  [FRAME DIFF] Move detected: {from_notation} → {to_notation}")
+        
+        from_indices = notation_to_indices(from_notation)
+        to_indices = notation_to_indices(to_notation)
+        
+        if from_indices and to_indices:
+            piece = chess_board.board[from_indices[0]][from_indices[1]]
+            if piece:
+                try:
+                    if piece.is_valid_move(chess_board, from_indices, to_indices):
+                        piece_label = reference_board_state.get(from_notation, "Unknown")
+                        print(f"  [FRAME DIFF] Labeling {to_notation} as: {piece_label}")
+                        
+                        target_piece = chess_board.board[to_indices[0]][to_indices[1]]
+                        is_capture = target_piece is not None and target_piece.name != 'GP'
+                        
+                        chess_board.board[to_indices[0]][to_indices[1]] = piece
+                        chess_board.board[from_indices[0]][from_indices[1]] = None
+                        
+                        new_labels[to_notation] = piece_label
+                        del new_labels[from_notation]
+                        
+                        if piece_label != "Unknown":
+                            action = "capture" if is_capture else "move"
+                            record_move(from_notation, to_notation, piece_label, action, frame_num)
+                            
+                            if current_player == "white":
+                                current_player = "black"
+                            else:
+                                current_player = "white"
+                                current_turn += 1
+                        
+                        reference_board_state.clear()
+                        reference_board_state.update(new_labels)
+                        print(f"  [FRAME DIFF] Reference state updated")
+                        return new_labels
+                except Exception as e:
+                    print(f"  [FRAME DIFF] Exception: {e}")
+    else:
+        if len(disappeared) > 0 or len(appeared) > 0:
+            print(f"  [FRAME DIFF] No single move detected (disappeared:{len(disappeared)}, appeared:{len(appeared)})")
+    
+    reference_board_state.clear()
+    reference_board_state.update(new_labels)
+    current_board_state.clear()
+    current_board_state.update(new_labels)
+    return new_labels
 
 
 def model_detect(
@@ -359,6 +691,8 @@ def model_detect(
     iou=0.7,
     visualize=True,
     mode="starting_position",
+    prev_detected_pieces=None,
+    frame_num=0,
 ):
     """
     Detect chess pieces by running the detector on the ORIGINAL frame, map detections into warped
@@ -385,11 +719,9 @@ def model_detect(
     cls = boxes.cls.cpu().numpy().astype(int)
     class_names = model.names if hasattr(model, "names") else {0: "chess-piece"}
 
-    # Get square centers in warped coords
     padding_percent = padding_info["padding_percent"]
     centers = get_square_centers(warp, padding_percent=padding_percent)
 
-    # Create bottom-center points in ORIGINAL image and transform them to warped coords
     det_bottom_centers = []
     for x1, y1, x2, y2 in xyxy:
         px = (x1 + x2) / 2.0
@@ -403,10 +735,8 @@ def model_detect(
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
 
-        # 🔥 FILTER OUT PIECES OUTSIDE THE BOARD 🔥
         if not point_in_quad((cx, cy), corners):
             continue
-    # Snap warped points to nearest square center
     pieces = []
     for i, (wx, wy) in enumerate(warped_pts):
         distances = np.sum((centers - [wx, wy]) ** 2, axis=2)
@@ -424,10 +754,8 @@ def model_detect(
             }
         )
 
-    # Apply chess rules to cleaned list
     pieces = apply_chess_rules(pieces, mode=mode)
 
-    # Map snapped centers back to ORIGINAL coordinates using inverse homography
     if len(pieces) > 0:
         warped_centers = np.array(
             [p["assigned_center_warp"] for p in pieces], dtype=np.float32
@@ -437,22 +765,21 @@ def model_detect(
     else:
         original_centers = np.zeros((0, 2), dtype=np.float32)
 
-    # Build final outputs and visualization metadata
     final_output = []
     output_array = [[], [], [], [], [], [], [], []]
     viz_bboxes = []
     viz_centers_orig = []
     final_pieces_for_vis = []
+    detected_notations = []
 
-    # row
     for row in range(8):
-        # column
         for col in range(8):
             output_array[row].append(0)
 
     for idx, p in enumerate(pieces):
         output_array[p["row"]][p["col"]] = 1
         notation = coords_to_notation(p["row"], p["col"])
+        detected_notations.append(notation)
         name = class_names[p["cls"]] if p["cls"] in class_names else f"class_{p['cls']}"
         final_output.append((name, notation))
 
@@ -467,15 +794,22 @@ def model_detect(
                     )[0]
                 )
             )
+    
+    if chess_board and len(reference_board_state) > 0:
+        piece_labels = frame_diff_labeling(detected_notations, frame_num)
+    else:
+        piece_labels = {}
+    
+    for idx, p in enumerate(pieces):
+        notation = detected_notations[idx]
+        piece_origin = piece_labels.get(notation, "Unknown")
 
         final_pieces_for_vis.append(
-            {"notation": notation, "conf": p["conf"], "cls": p["cls"]}
+            {"notation": notation, "conf": p["conf"], "cls": p["cls"], "piece_name": piece_origin}
         )
 
-    # Visualize on warped board and original
     if visualize:
         try:
-            # visualize_detections(warp, pieces, class_names, padding_percent)
             if len(final_output) > 0:
                 visualize_on_original(
                     frame, viz_bboxes, viz_centers_orig, final_pieces_for_vis
@@ -483,12 +817,17 @@ def model_detect(
         except Exception as e:
             print("Visualization failed:", e)
 
-    return final_output, output_array
-
-
-# ============================================
-# VISUALIZE DETECTIONS ON WARPED BOARD
-# ============================================
+    first_frame_detections = []
+    for idx, p in enumerate(pieces):
+        notation = detected_notations[idx]
+        class_name = class_names[p["cls"]] if p["cls"] in class_names else None
+        if class_name:
+            first_frame_detections.append({
+                'notation': notation,
+                'class_name': class_name
+            })
+    
+    return final_output, output_array, detected_notations, first_frame_detections
 
 
 def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
@@ -507,7 +846,6 @@ def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
     square_w = board_w / 8
     square_h = board_h / 8
 
-    # Generate consistent colors per class
     np.random.seed(50)
     colors = {i: tuple(np.random.randint(0, 256, 3).tolist()) for i in range(12)}
 
@@ -540,7 +878,6 @@ def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
 
 
 def debugging(change, window, window_size, win_sum, flag):
-    # DEBUGGING
     print(f"Mag of change: {change}")
     print(f"Window: {window}")
     if len(window) == window_size:
@@ -554,13 +891,21 @@ def debugging(change, window, window_size, win_sum, flag):
 
 
 def main():
-    # Config
-    VIDEO_PATH = "../Videos/6.MOV"
-    CORNER_MODEL = "../models/corners/best.pt"
-    PIECE_MODEL = "../models/pieces/best.pt"
+    global chess_board, piece_tracker, video_fps
+    
+    VIDEO_PATH = "../Videos/5.MOV"
+    CORNER_MODEL = "../models/corners/best_c.pt"
+    PIECE_MODEL = "../models/pieces/best_p.pt"
+    
+    chess_board = create_initial_board()
+    print("✓ Chess board initialized with standard starting position")
 
     cap = cv2.VideoCapture(VIDEO_PATH)
-    # For comparisons
+    
+    global video_fps
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+    print(f"✓ Video FPS: {video_fps}")
+    
     ZERO_ARRAY = np.array(
         [
             [0, 0, 0, 0, 0, 0, 0, 0],
@@ -575,11 +920,9 @@ def main():
     )
     flagged_frames = {}
 
-    # for graphing purposes
     frame_idx = []
     magnitudes = []
 
-    # For stable frame selection
     T = 1
     WINDOW_SIZE = 24
     stable_flag = True
@@ -589,9 +932,9 @@ def main():
     warped, corners, transform_matrix = None, None, None
     frame_num = 0
     output_array = []
+    prev_detected_pieces = None
     while cap.isOpened():
         ret, frame = cap.read()
-        # print(frame_num)
         if not ret:
             print("Stream End?. Exiting ...")
             break
@@ -604,15 +947,13 @@ def main():
                 padding_percent=PADDING,
                 shrink_corners_percent=0.0,
             )
-        # Detect corners and warp board
 
         if warped is None:
             print("✗ Failed to detect board")
             return
 
-        # print("\nDetecting pieces...")
         prev_array = output_array
-        output, output_array = model_detect(
+        output, output_array, detected_pieces, first_frame_detections = model_detect(
             frame,
             warped,
             corners,
@@ -623,17 +964,15 @@ def main():
             iou=0.7,
             visualize=True,
             mode="",
+            prev_detected_pieces=prev_detected_pieces,
+            frame_num=frame_num,
         )
-        # Print results
-        # print(f"\n✓ Detected {len(output)} pieces:")
-        # for piece_name, notation in sorted(output, key=lambda x: x[1]):
-        #    print(f"  {piece_name:15s} @ {notation}")
-
-        # Print output array
-        # for r in output_array:
-        #    for c in r:
-        #        print(c, end=" ")
-        #    print()
+        
+        if frame_num == 0 and len(detected_pieces) > 0:
+            initialize_piece_tracker(detected_pieces, chess_board)
+            print(f"✓ Piece tracker initialized: {len(piece_tracker)} pieces tagged with starting positions")
+        
+        prev_detected_pieces = detected_pieces
 
         x = 0
         if frame_num == 0:
@@ -647,49 +986,27 @@ def main():
                 flagged_frames[frame_num] = frame
             elif (array_dif == ZERO_ARRAY).all() and len(
                 stable_frames
-            ) == 0:  # THIS SHOULD PRETTY MUCH ONLY HAPPEN IN THE 2nd frame
+            ) == 0:
                 stable_frames[frame_num] = output_array
 
             frame_idx.append(frame_num)
             magnitudes.append(x)
 
-        # Sliding window
         win_sum = 0
         if len(window) < WINDOW_SIZE:
-            # building initial window
             window = np.append(window, x)
         else:
-            # update window
             win_sum = np.sum(window)
-            # If stable flag is true, we keep going until a frame of magnitude 1 is added to window
             if win_sum < T and stable_flag and x > 0:
                 stable_flag = False
 
-            # If the sum of the window elements is less than 1 and the stable flag is false
             elif win_sum < T and not stable_flag:
-                # Pick a frame and set flag to True
                 if stable_frames[list(stable_frames.keys())[-1]] != output_array:
                     stable_frames[frame_num] = output_array
                 stable_flag = True
 
-            # update window
             window = np.delete(window, 0)
             window = np.append(window, x)
-
-        ### OKAY HERE IS WHERE YOU START ANDRES/JADE/WHOEVER ELSE ###
-        """
-        So, to access the matrices from the stable frames you can do something like this for loop
-        this loop, as is, just prints all of the matrices, but it can help you get an idea.
-
-        #for array in stable_frames.values():
-        #    for c in array:
-        #        print(c, end=" ")
-        #        print()
-        #    print()
-        """
-
-        # Prints Debugging Info
-        # debugging(x, window, WINDOW_SIZE, win_sum, stable_flag)
 
         if cv2.waitKey(1) == ord("q"):
             break
@@ -698,15 +1015,10 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
-    # UNCOMMENT TO PRINT OUT STABLE FRAMES
-    # for array in stable_frames.values():
-    #    for c in array:
-    #        print(c, end=" ")
-    #        print()
-    #    print()
-
     plt.step(frame_idx, magnitudes)
     plt.show()
+    
+    save_move_history("../output/moves.json")
 
     print("\n✓ Process complete!")
 
