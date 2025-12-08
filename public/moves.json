@@ -1,0 +1,182 @@
+[
+  {
+    "turn": 1,
+    "color": "white",
+    "piece": "pawn",
+    "from": "e2",
+    "to": "e4",
+    "action": "move",
+    "timestamp": "00:03:210"
+  },
+  {
+    "turn": 1,
+    "color": "black",
+    "piece": "pawn",
+    "from": "e7",
+    "to": "e5",
+    "action": "move",
+    "timestamp": "00:06:744"
+  },
+  {
+    "turn": 2,
+    "color": "white",
+    "piece": "knight",
+    "from": "g1",
+    "to": "f3",
+    "action": "move",
+    "timestamp": "00:10:501"
+  },
+  {
+    "turn": 2,
+    "color": "black",
+    "piece": "knight",
+    "from": "b8",
+    "to": "c6",
+    "action": "move",
+    "timestamp": "00:14:003"
+  },
+  {
+    "turn": 3,
+    "color": "white",
+    "piece": "bishop",
+    "from": "f1",
+    "to": "c4",
+    "action": "move",
+    "timestamp": "00:18:552"
+  },
+  {
+    "turn": 3,
+    "color": "black",
+    "piece": "pawn",
+    "from": "g7",
+    "to": "g6",
+    "action": "move",
+    "timestamp": "00:22:315"
+  },
+  {
+    "turn": 4,
+    "color": "white",
+    "piece": "queen",
+    "from": "d1",
+    "to": "f3",
+    "action": "move",
+    "timestamp": "00:27:044"
+  },
+  {
+    "turn": 4,
+    "color": "black",
+    "piece": "bishop",
+    "from": "f8",
+    "to": "g7",
+    "action": "move",
+    "timestamp": "00:31:882"
+  },
+  {
+    "turn": 5,
+    "color": "white",
+    "piece": "pawn",
+    "from": "d2",
+    "to": "d3",
+    "action": "move",
+    "timestamp": "00:36:550"
+  },
+  {
+    "turn": 5,
+    "color": "black",
+    "piece": "pawn",
+    "from": "d7",
+    "to": "d6",
+    "action": "move",
+    "timestamp": "00:41:211"
+  },
+  {
+    "turn": 6,
+    "color": "white",
+    "piece": "bishop",
+    "from": "c1",
+    "to": "g5",
+    "action": "move",
+    "timestamp": "00:46:920"
+  },
+  {
+    "turn": 6,
+    "color": "black",
+    "piece": "knight",
+    "from": "g8",
+    "to": "e7",
+    "action": "move",
+    "timestamp": "00:50:602"
+  },
+  {
+    "turn": 7,
+    "color": "white",
+    "piece": "knight",
+    "from": "b1",
+    "to": "c3",
+    "action": "move",
+    "timestamp": "00:55:337"
+  },
+  {
+    "turn": 7,
+    "color": "black",
+    "piece": "pawn",
+    "from": "h7",
+    "to": "h6",
+    "action": "move",
+    "timestamp": "01:00:114"
+  },
+  {
+    "turn": 8,
+    "color": "white",
+    "piece": "bishop",
+    "from": "g5",
+    "to": "h4",
+    "action": "move",
+    "timestamp": "01:04:881"
+  },
+  {
+    "turn": 8,
+    "color": "black",
+    "piece": "pawn",
+    "from": "g6",
+    "to": "g5",
+    "action": "move",
+    "timestamp": "01:09:742"
+  },
+  {
+    "turn": 9,
+    "color": "white",
+    "piece": "bishop",
+    "from": "c4",
+    "to": "f7",
+    "action": "capture",
+    "timestamp": "01:14:331"
+  },
+  {
+    "turn": 9,
+    "color": "black",
+    "piece": "king",
+    "from": "e8",
+    "to": "f7",
+    "action": "capture",
+    "timestamp": "01:18:902"
+  },
+  {
+    "turn": 10,
+    "color": "white",
+    "piece": "queen",
+    "from": "f3",
+    "to": "h5",
+    "action": "move",
+    "timestamp": "01:23:551"
+  },
+  {
+    "turn": 10,
+    "color": "black",
+    "piece": "knight",
+    "from": "e7",
+    "to": "g6",
+    "action": "move",
+    "timestamp": "01:28:266"
+  }
+]
