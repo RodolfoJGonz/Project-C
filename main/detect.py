@@ -7,13 +7,8 @@ import json
 import os
 
 
-# ============================================
-# ====== HOMOGRAPHY POINT TRANSFORM HELPERS ======
-# ============================================
-
-
+# Homography
 def transform_points(pts, M):
-    """Transform points using homography matrix M"""
     if len(pts) == 0:
         return np.zeros((0, 2), dtype=np.float32)
 
@@ -21,6 +16,7 @@ def transform_points(pts, M):
     return cv2.perspectiveTransform(pts, M).reshape(-1, 2)
 
 
+# Bounding boxes on original frame
 def visualize_on_original(original, bboxes, assigned_centers_orig, final_pieces):
     vis = original.copy()
     color_box = (0, 255, 255)
@@ -51,27 +47,18 @@ def visualize_on_original(original, bboxes, assigned_centers_orig, final_pieces)
         cv2.imshow("Original - Snapped Board Mapping", vis)
 
 
-# ============================================
-# CORNER DETECTION & GRID SETUP
-# ============================================
-
 PADDING = 0.1
 
 
+# Check point is in board area
 def point_in_quad(point, quad):
-    """
-    Check if a point lies inside a quadrilateral (board area)
-    point = (x,y)
-    quad = np.array([[x1,y1],[x2,y2],[x3,y3],[x4,y4]])
-    """
-
     quad = quad.astype(np.int32)
     result = cv2.pointPolygonTest(quad, point, False)
     return result >= 0  # inside or on edge
 
 
+# Label corners of board (TL, TR, BR, BL)
 def order_points(pts):
-    """Order points: top-left, top-right, bottom-right, bottom-left"""
     rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
     rect[0] = pts[np.argmin(s)]
@@ -84,13 +71,8 @@ def order_points(pts):
     return rect
 
 
+# Call model to detect corners. Should only be called once.
 def detect_corners(frame, model, shrink_percent=0.0):
-    """
-    Detect corners in a frame using YOLO model.
-
-    Returns:
-        numpy array of 4 ordered corner points, or None if detection failed
-    """
     results = model.predict(frame, conf=0.25, iou=0.4, verbose=False)
     boxes = results[0].boxes
 
@@ -116,11 +98,8 @@ def detect_corners(frame, model, shrink_percent=0.0):
     return corners
 
 
+# Warping the board (for finding centers and visualization)
 def four_point_transform(frame, pts, padding_percent=PADDING):
-    """
-    Apply perspective transform to get bird's eye view.
-    Returns: (warped_image, transform_matrix, padding_info)
-    """
     rect = order_points(pts)
     (tl, tr, br, bl) = rect
 
@@ -165,10 +144,8 @@ def four_point_transform(frame, pts, padding_percent=PADDING):
     return warped, M, padding_info
 
 
+# 8x8 grid on warped board
 def create_grid_overlay(frame, grid_size=8, padding_percent=PADDING):
-    """
-    Create 8x8 grid overlay on the warped board.
-    """
     h, w = frame.shape[:2]
 
     # Calculate padding in pixels consistent with get_square_centers
@@ -204,6 +181,7 @@ def create_grid_overlay(frame, grid_size=8, padding_percent=PADDING):
     return overlay
 
 
+# Detect corners -> create warped board
 def build_grid(
     frame,
     corner_model_path="../models/corners/best.pt",
@@ -244,15 +222,9 @@ def build_grid(
     return corners, warped, transform_matrix, padding_info
 
 
-# ============================================
-# GRID HELPERS
-# ============================================
-
-
+# centers is an 8x8x2 array where 8x8 is for square location
+# and the extra z dimention is to store (x,y) which is the square center
 def get_square_centers(warp, grid_size=8, padding_percent=PADDING):
-    """
-    Return an 8x8x2 array of (cx, cy) centers in warped-image coords.
-    """
     h, w = warp.shape[:2]
 
     # Calculate padding in pixels
@@ -276,10 +248,8 @@ def get_square_centers(warp, grid_size=8, padding_percent=PADDING):
     return centers
 
 
+# For snapping bounding box bottom centers to square centers
 def snap_to_square_nearest(x1, y1, x2, y2, centers, use_bottom_center=True):
-    """
-    Snap bbox to the nearest square center.
-    """
     if use_bottom_center:
         px = (x1 + x2) / 2.0
         py = float(y2)
@@ -294,13 +264,6 @@ def snap_to_square_nearest(x1, y1, x2, y2, centers, use_bottom_center=True):
     assigned_center = tuple(centers[row, col])
 
     return row, col, assigned_center
-
-
-def coords_to_notation(row, col):
-    """Convert grid coordinates to chess notation"""
-    files = "hgfedcba"
-    ranks = "87654321"
-    return f"{files[row]}{ranks[col]}"
 
 
 # ============================================
@@ -532,6 +495,15 @@ def debugging(change, window, window_size, win_sum, flag):
     print(f"Stable Flag: {flag}")
 
 
+# Grid coordinates to chess notation only used for visualization
+def coords_to_notation(row, col):
+    files = "hgfedcba"
+    ranks = "87654321"
+    return f"{files[row]}{ranks[col]}"
+
+
+# The next 4 functions are all for manipulation
+# of coordinates in the actual logic
 def mat_to_game_coords(row, column):
     r = column
     c = 7 - row
@@ -561,6 +533,8 @@ def to_algebraic(r, c):
     return file_char + rank_char
 
 
+# Use a "mask" (difference between 2 binary 8x8 arrays)
+# to determine source and destination squares
 def infer_move_from_masks(diff_mask):
     from_indices = np.argwhere(diff_mask == 1)
     to_indices = np.argwhere(diff_mask == -1)
@@ -589,6 +563,8 @@ def infer_move_from_masks(diff_mask):
     return dest_square + source_square
 
 
+# OpenCV color checking to decide where
+# Capture happened
 def detect_color(cropped_img, threshold=100):
     if cropped_img.size == 0:
         return None
@@ -599,15 +575,12 @@ def detect_color(cropped_img, threshold=100):
     crop_h, crop_w = h // 4, w // 4
     center_patch = gray[crop_h : h - crop_h, crop_w : w - crop_w]
 
-    # 3. Calculate Mean Intensity
-    # 0 = Pure Black, 255 = Pure White
     avg_intensity = np.mean(center_patch)
 
-    # 4. Return 'w' if bright, 'b' if dark
-    # You might need to tune this threshold based on your lighting!
     return "w" if avg_intensity > threshold else "b"
 
 
+# Save moves to output file for transfer to website
 def save_move_history(file_name, history):
     output_dest = "../output/" + file_name
 
@@ -624,6 +597,7 @@ def save_move_history(file_name, history):
         print(f"✗ Failed to save move history: {e}")
 
 
+# building moves that get input into move_history
 def build_move(action, board, time, color, from_notation, to_notation, piece_type):
     item = {
         "turn": board.fullmove_number,
@@ -637,6 +611,8 @@ def build_move(action, board, time, color, from_notation, to_notation, piece_typ
     return item
 
 
+# For calculating time using framerate and frame number
+# used for timestamp field in moves for website usage
 def calculate_time(fps, frame_num):
     seconds = frame_num / fps if fps > 0 else 0
     minutes = int(seconds // 60)
@@ -646,22 +622,20 @@ def calculate_time(fps, frame_num):
     return timestamp
 
 
-# ============================================
 # MAIN
-# ============================================
-
-
 def main():
     # Config
-    VIDEO_PATH = "../Videos/14.mp4"
-    CORNER_MODEL = "../models/corners/best.pt"
-    PIECE_MODEL = "../models/pieces/best.pt"
+    VIDEO_PATH = "path/to/video"
+    CORNER_MODEL = "path/to/corner/model"
+    PIECE_MODEL = "path/to/piece/model"
 
+    # Initiate python-chess board
     engine_board = chess.Board()
 
     cap = cv2.VideoCapture(VIDEO_PATH)
 
     video_fps = cap.get(cv2.CAP_PROP_FPS)
+
     # For comparisons
     ZERO_ARRAY = np.zeros((8, 8))
 
@@ -675,20 +649,27 @@ def main():
     stable_flag = True
     window = np.array([])
     stable_frames = []
+    output_array = []
+
+    # Move and piece counting
     max_pieces = 32
     history = []
 
+    # Misc
     warped, corners, transform_matrix = None, None, None
     frame_num = 0
-    output_array = []
+
+    # Main loop
     while cap.isOpened():
         ret, frame = cap.read()
-        # print(frame_num)
         if not ret:
             print("Stream End?. Exiting ...")
             break
+
         if frame_num == 0:
             print("Detecting board corners...")
+
+            # Detect corners and warp board
             corners, warped, transform_matrix, padding_info = build_grid(
                 frame,
                 corner_model_path=CORNER_MODEL,
@@ -696,12 +677,12 @@ def main():
                 padding_percent=PADDING,
                 shrink_corners_percent=0.0,
             )
-        # Detect corners and warp board
 
         if warped is None:
             print("✗ Failed to detect board")
             return
 
+        # Assign previous binary array before overriding output_array
         prev_array = output_array
         output, output_array = model_detect(
             frame,
@@ -715,8 +696,11 @@ def main():
             visualize=True,
         )
 
+        # x is magnitude of change in frame.
+        # change is the amount of bouding boxes added or disappearing
         x = 0
         array_dif = None
+
         if frame_num == 0:
             frame_idx.append(frame_num)
             magnitudes.append(x)
@@ -724,7 +708,6 @@ def main():
             array_dif = np.subtract(prev_array, output_array)
             if (array_dif != ZERO_ARRAY).any():
                 x = np.sum(abs(array_dif))
-                # print(f"Magnitude of Change: {x}")
             # THIS SHOULD PRETTY MUCH ONLY HAPPEN IN THE 2nd frame
             elif (array_dif == ZERO_ARRAY).all() and len(stable_frames) == 0:
                 item = {
@@ -761,18 +744,23 @@ def main():
             ):
                 # Pick a frame and set flag to True
                 stable_dif = np.subtract(output_array, stable_frames[-1]["array"])
+
                 if (stable_dif != ZERO_ARRAY).any():
                     # Normal move Scenario
                     if np.sum(stable_dif) == 0 and np.sum(abs(stable_dif)) == 2:
+                        # ignore frame if amount of pieces detected is not equal to max_pieces
                         if np.sum(output_array) != max_pieces:
                             frame_num += 1
                             continue
+
                         print("\nNORMAL MOVE: ")
+                        # constructing stable frame item
                         item = {
                             "frame_number": frame_num,
                             "array": output_array,
                             "mask": stable_dif,
                         }
+                        # Process move in python-chess board
                         uci_move = infer_move_from_masks(stable_dif)
                         if uci_move:
                             try:
@@ -799,14 +787,11 @@ def main():
                                         )
                                     )
                                     san_move = engine_board.san(move)
-                                    engine_board.push(
-                                        move
-                                    )  # This updates ALL FEN variables
+                                    # This updates ALL FEN variables
+                                    engine_board.push(move)
+                                    # prints board and move in FEN notation
                                     print(f"Move: {san_move}")
-                                    print(
-                                        "Current FEN:",
-                                        engine_board.fen(),
-                                    )
+                                    print(f"Current FEN: {engine_board.fen()}")
                                     print(engine_board)
                                 else:
                                     print(
@@ -816,14 +801,17 @@ def main():
                                 print(f"Error converting UCI move: {uci_move}")
                         else:
                             print("Could not infer simple move from mask")
+
+                        # After processing and updating board, store stable frame
                         stable_frames.append(item)
 
                     # Capture Scenario
                     elif np.sum(stable_dif) == -1:
+                        # Ignore frame if binary array is not equal to max_piece-1
                         if np.sum(output_array) != max_pieces - 1:
                             frame_num += 1
                             continue
-                        # Pick bounding boxes
+
                         print("\nCAPTURE MOVE: ")
                         item = {
                             "frame_number": frame_num,
@@ -834,6 +822,7 @@ def main():
                         origin_square = chess.parse_square(str(uci_move))
                         piece = engine_board.piece_at(origin_square)
 
+                        # all moves available for piece on origin_square
                         matching_moves = []
                         for move in engine_board.legal_moves:
                             if move.from_square == origin_square:
@@ -855,6 +844,7 @@ def main():
                             )
 
                         # Coordinates for end destination of possible moves
+                        # Pick bounding boxes
                         occupied = []
                         for coord in dest_coords:
                             for piece in output:
@@ -864,13 +854,14 @@ def main():
                                 ):
                                     occupied.append((piece, coord))
 
+                        # If there are no capture moves available, ignore frame
                         if len(occupied) == 0:
-                            print("nvm not a capture move, please proceed")
                             frame_num += 1
                             continue
 
                         valid_capture = None
                         turn_color = "w" if engine_board.turn == chess.WHITE else "b"
+                        # If there is 1 capture move, thats the valid move
                         if len(occupied) == 1:
                             x1, y1, x2, y2 = occupied[0][0]["orig_bbox"]
                             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
@@ -879,6 +870,9 @@ def main():
                             color = detect_color(cropped)
                             if color == turn_color:
                                 valid_capture = occupied[0]
+
+                        # If more than 1, iterate through them and do a color check
+                        # to see where our capturing piece went
                         else:
                             for piece in occupied:
                                 x1, y1, x2, y2 = piece[0]["orig_bbox"]
@@ -890,8 +884,8 @@ def main():
                                     valid_capture = piece
                                     break
 
+                        # If valid move is found, process move
                         if valid_capture is not None:
-                            # Build move
                             move = chess.Move.from_uci(valid_capture[1]["move"])
                             timestamp = calculate_time(video_fps, frame_num)
                             d_square = move.to_square
@@ -918,10 +912,13 @@ def main():
                                 engine_board.fen(),
                             )
                             print(engine_board)
+
+                        # if no valid move is found, skip frame
                         else:
                             frame_num += 1
                             continue
 
+                        # Store stable frame and decrease piece max capture happened
                         stable_frames.append(item)
                         max_pieces -= 1
 
@@ -930,14 +927,12 @@ def main():
 
                     else:
                         print("INVALID MOVE DETECTED\n")
-                        # engine_board.pop()
 
                 stable_flag = True
 
             # update window
             window = np.delete(window, 0)
             window = np.append(window, x)
-            # print(*window, sep="")
 
         # Prints Debugging Info
         # debugging(x, window, WINDOW_SIZE, win_sum, stable_flag)
@@ -951,18 +946,12 @@ def main():
     cap.release()
     cv2.destroyAllWindows()
 
-    # UNCOMMENT TO PRINT OUT STABLE FRAMES
-    # for array in stable_frames.values():
-    #    for c in array:
-    #        print(c, end=" ")
-    #        print()
-    #    print()
-
     plt.step(frame_idx, magnitudes)
     plt.show()
 
     print("\nProcess complete!")
 
 
+# Doing this to avoid Windows issues
 if __name__ == "__main__":
     main()
