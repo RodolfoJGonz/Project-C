@@ -7,6 +7,9 @@ import json
 import os
 
 
+PADDING = 0.1
+
+
 # Homography
 def transform_points(pts, M):
     if len(pts) == 0:
@@ -45,9 +48,6 @@ def visualize_on_original(original, bboxes, assigned_centers_orig, final_pieces)
         cv2.imshow("Original - Snapped Board Mapping", cv2.resize(vis, (1280, 720)))
     except Exception:
         cv2.imshow("Original - Snapped Board Mapping", vis)
-
-
-PADDING = 0.1
 
 
 # Check point is in board area
@@ -266,16 +266,8 @@ def snap_to_square_nearest(x1, y1, x2, y2, centers, use_bottom_center=True):
     return row, col, assigned_center
 
 
-# ============================================
-# PIECE-RULES FILTERING
-# ============================================
-
-
+# only rules we need is to keep one piece per square
 def apply_chess_rules(pieces):
-    """
-    Apply chess rules to clean up predictions.
-    Keeps highest-confidence piece per square and optionally apply stricter starting-position rules.
-    """
     # RULE 1: One piece per square
     square_map = {}
     for p in pieces:
@@ -293,11 +285,8 @@ def apply_chess_rules(pieces):
     return cleaned
 
 
-# ============================================
-# UPDATED model_detect (main integration)
-# ============================================
-
-
+# Main detection function. Detects on original frame, and maps detections
+# to warped grid so apply snapping.
 def model_detect(
     frame,
     warp,
@@ -309,10 +298,6 @@ def model_detect(
     iou=0.7,
     visualize=True,
 ):
-    """
-    Detect chess pieces by running the detector on the ORIGINAL frame, map detections into warped
-    coordinates to snap to grid, then map snapped centers back to original for visualization.
-    """
     if warp is None or transform_matrix is None:
         print("Warp or transform matrix missing")
         return []
@@ -338,7 +323,7 @@ def model_detect(
     padding_percent = padding_info["padding_percent"]
     centers = get_square_centers(warp, padding_percent=padding_percent)
 
-    # Create bottom-center points in ORIGINAL image and transform them to warped coords
+    # Create bottom-center points in original frame and transform them to warped coords
     det_bottom_centers = []
     for x1, y1, x2, y2 in xyxy:
         px = (x1 + x2) / 2.0
@@ -376,7 +361,7 @@ def model_detect(
     # Apply chess rules to cleaned list
     pieces = apply_chess_rules(pieces)
 
-    # Map snapped centers back to ORIGINAL coordinates using inverse homography
+    # Map snapped centers back to original coordinates using inverse homography
     if len(pieces) > 0:
         warped_centers = np.array(
             [p["assigned_center_warp"] for p in pieces], dtype=np.float32
@@ -395,12 +380,10 @@ def model_detect(
 
     # Populate output array
     # row
-    for row in range(8):
-        # column
-        for _ in range(8):
-            output_array[row].append(0)
+    output_array = np.zeros((8, 8))
 
     for idx, p in enumerate(pieces):
+        # Add 1's where piece is detected
         output_array[p["row"]][p["col"]] = 1
         notation = coords_to_notation(p["row"], p["col"])
         name = class_names[p["cls"]] if p["cls"] in class_names else f"class_{p['cls']}"
@@ -436,11 +419,7 @@ def model_detect(
     return pieces, output_array
 
 
-# ============================================
-# VISUALIZE DETECTIONS ON WARPED BOARD
-# ============================================
-
-
+# More for debugging. visualizing detections to warped grid
 def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
     vis = warp.copy()
     h, w = warp.shape[:2]
@@ -454,7 +433,7 @@ def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
     square_w = board_w / 8
     square_h = board_h / 8
 
-    # Generate consistent colors per class
+    # consistent colors per class
     np.random.seed(50)
     colors = {i: tuple(np.random.randint(0, 256, 3).tolist()) for i in range(12)}
 
@@ -486,8 +465,8 @@ def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
         cv2.imshow("Detections (Warped)", vis)
 
 
+# Prints some debugging info
 def debugging(change, window, window_size, win_sum, flag):
-    # DEBUGGING
     print(f"Mag of change: {change}")
     print(f"Window: {window}")
     if len(window) == window_size:
