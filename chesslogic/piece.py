@@ -1,48 +1,15 @@
 blocked_path = "There's a piece in the path."
 incorrect_path = "This piece does not move in this pattern."
 
-
+#helper fucntion for Knight
 def check_knight(color, board, pos):
-    """
-    Check if there is a knight of the opposite `color` at
-    position `pos` on board `board`. 
-
-    color : bool
-        True if white
-
-    board : Board
-        Representation of the current chess board
-
-    pos : tup
-        Indices to check if there's is a knight
-
-    Precondition `pos` is a valid position on the board.
-    """
     piece = board.board[pos[0]][pos[1]]
     if piece != None and piece.color != color and piece.name == 'N':
         return False
     return True
 
-
+#helper function, check diagonal paths
 def check_diag_castle(color, board, start, to): 
-    """
-    Checks the diagonal path from `start` (non-inclusive) to `to` (inclusive)
-    on board `board` for any threats from the opposite `color`
-
-    color : bool
-        True if white
-
-    board : Board
-        Representation of the current chess board
-
-    start : tup
-        Starting point of the diagonal path
-
-    to : tup
-        Ending point of the diagonal path
-
-    Precondition: `start` and `to` are valid positions on the board
-    """
     
     if abs(start[0] - to[0]) != abs(start[1] - to[1]):
         print(incorrect_path)
@@ -73,21 +40,8 @@ def check_diag_castle(color, board, start, to):
 
     return True
 
-
+#helper function id diagonal is clear of pieces
 def check_diag(board, start, to):
-    """
-    Checks if there are no pieces along the diagonal path from
-    `start` (non-inclusive) to `to` (non-inclusive). 
-
-    board : Board
-        Representation of the current board
-
-    start : tup
-        Start location of diagonal path
-
-    to : tup
-        End location of diagonal path
-    """
 
     if abs(start[0] - to[0]) != abs(start[1] - to[1]):
         print(incorrect_path)
@@ -107,24 +61,8 @@ def check_diag(board, start, to):
         j += y_pos
     return True
 
-
+#helper function, checking horizontal/vertical paths ways
 def check_updown_castle(color, board, start, to):
-    """
-    Checks if there are any threats from the opposite `color` from `start` (non-inclusive)
-    to `to` (inclusive) on board `board`.
-
-    color : bool
-        True if white's turn
-    
-    board : Board
-        Representation of the current board
-
-    start : tup
-        Start location of vertical path
-
-    to : tup
-        End location of vertical path
-    """
     
     x_pos = 1 if to[0] - start[0] > 0 else -1
     i = start[0] + x_pos
@@ -144,20 +82,8 @@ def check_updown_castle(color, board, start, to):
         
     return True
 
+#helper function, chekcing if pieces are in the way of horizontal/vertical paths
 def check_updown(board, start, to):
-    """
-    Checks if there are no pieces along the vertical or horizontal path
-    from `start` (non-inclusive) to `to` (non-inclusive). 
-
-    board : Board
-        Representation of the current board
-
-    start : tup
-        Start location of diagonal path
-
-    to : tup
-        End location of diagonal path
-    """
     if start[0] == to[0]:
         smaller_y = start[1] if start[1] < to[1] else to[1]
         bigger_y = start[1] if start[1] > to[1] else to[1]
@@ -179,37 +105,8 @@ def check_updown(board, start, to):
         return True
 
 
-
+#base class of all chess pieces, all will inherit from it
 class Piece():
-    """
-    A class to represent a piece in chess
-    
-    ...
-
-    Attributes:
-    -----------
-    name : str
-        Represents the name of a piece as following - 
-        Pawn -> P
-        Rook -> R
-        Knight -> N
-        Bishop -> B
-        Queen -> Q
-        King -> K
-
-    color : bool
-        True if piece is white
-
-    Methods:
-    --------
-    is_valid_move(board, start, to) -> bool
-        Returns True if moving the piece at `start` to `to` is a legal
-        move on board `board`
-        Precondition: [start] and [to] are valid coordinates on the board.board
-    is_white() -> bool
-        Return True if piece is white
-
-    """
     def __init__(self, color):
         self.name = ""
         self.color = color
@@ -228,10 +125,6 @@ class Piece():
 
 class Rook(Piece):
     def __init__(self, color, first_move = True):
-        """
-        Same as base class Piece, except `first_move` is used to check
-        if this rook can castle.
-        """
         super().__init__(color)
         self.name = "R"
         self.first_move = first_move 
@@ -269,9 +162,11 @@ class Queen(Piece):
         self.name = "Q"
 
     def is_valid_move(self, board, start, to):
+        # diagonal
         if abs(start[0] - to[0]) == abs(start[1] - to[1]):
             return check_diag(board, start, to)
 
+        # up/down
         elif start[0] == to[0] or start[1] == to[1]:
             return check_updown(board, start, to)
         print(incorrect_path)
@@ -279,31 +174,15 @@ class Queen(Piece):
 
 class King(Piece):
     def __init__(self, color, first_move = True):
-        """
-        Same as base class Piece, except `first_move` is used to check
-        if this king can castle.
-        """
         super().__init__(color)
         self.name = "K"
         self.first_move = first_move 
         
     def can_castle(self, board, start, to, right):
-        """
-        Returns True if king at `start` can move to `to` on `board`.
 
-        board : Board
-            Represents the current board
-        start : tup
-            Position of the king
-        to : tup
-            Position of the resulting move
-        right: bool
-            True if castling to the right False otherwise
-
-        Precondition: moving from `start` to `to` is a castling move
-        """
-
+        # White castling kingside (e1 to g1, a1 rook to f1)
         if self.color and right:
+            # Check for knights attacking critical squares
             knight_attack = check_knight(self.color, board, (6, 1)) and \
                 check_knight(self.color, board, (6, 2)) and \
                 check_knight(self.color, board, (6, 3)) and \
@@ -317,6 +196,7 @@ class King(Piece):
             if not knight_attack: 
                 return False
 
+            # Check diagonals for bishop/queen threats
             diags = check_diag_castle(self.color, board, (7, 2), (2, 7)) and \
                 check_diag_castle(self.color, board, (7, 1), (1, 7)) and \
                 check_diag_castle(self.color, board, (7, 2), (5, 0)) and \
@@ -324,6 +204,7 @@ class King(Piece):
             if not diags:
                 return False
 
+            # Check vertical/horizontal for rook/queen threats
             updowns = check_updown_castle(self.color, board, (7, 2), (0, 2)) and \
                 check_updown_castle(self.color, board, (7, 1), (0, 1))
             if not updowns: 
@@ -335,7 +216,9 @@ class King(Piece):
             board.board[7][7] = None
             return True
         
+        # White castling queenside (e1 to c1, h1 rook to d1)
         if self.color and not right:
+            # Check for knights attacking critical squares
             knight_attack = check_knight(self.color, board, (6, 0)) and \
                 check_knight(self.color, board, (6, 1)) and \
                 check_knight(self.color, board, (6, 2)) and \
@@ -349,6 +232,7 @@ class King(Piece):
             if not knight_attack: 
                 return False
 
+            # Check diagonals for bishop/queen threats
             diags = check_diag_castle(self.color, board, (7, 4), (2, 0)) and \
                 check_diag_castle(self.color, board, (7, 5), (1, 0)) and \
                 check_diag_castle(self.color, board, (7, 4), (5, 7)) and \
@@ -356,6 +240,7 @@ class King(Piece):
             if not diags:
                 return False
 
+            # Check vertical/horizontal for rook/queen threats
             updowns = check_updown_castle(self.color, board, (7, 4), (0, 4)) and \
                 check_updown_castle(self.color, board, (7, 5), (0, 5))
             if not updowns: 
@@ -367,7 +252,9 @@ class King(Piece):
 
             return True
 
+        # Black castling kingside (e8 to g8, a8 rook to f8)
         if not self.color and right:
+            # Check for knights attacking critical squares
             knight_attack = check_knight(self.color, board, (1, 1)) and \
                 check_knight(self.color, board, (1, 2)) and \
                 check_knight(self.color, board, (1, 3)) and \
@@ -381,6 +268,7 @@ class King(Piece):
             if not knight_attack: 
                 return False
 
+            # Check diagonals for bishop/queen threats
             diags = check_diag_castle(self.color, board, (0, 2), (5, 7)) and \
                 check_diag_castle(self.color, board, (0, 1), (5, 0)) and \
                 check_diag_castle(self.color, board, (0, 2), (2, 0)) and \
@@ -388,6 +276,7 @@ class King(Piece):
             if not diags:
                 return False
 
+            # Check vertical/horizontal for rook/queen threats
             updowns = check_updown_castle(self.color, board, (0, 2), (7, 2)) and \
                 check_updown_castle(self.color, board, (0, 1), (7, 1))
             if not updowns: 
@@ -400,7 +289,9 @@ class King(Piece):
 
             return True
         
+        # Black castling queenside (e8 to c8, h8 rook to d8)
         if not self.color and not right:
+            # Check for knights attacking critical squares
             knight_attack = check_knight(self.color, board, (1, 0)) and \
                 check_knight(self.color, board, (1, 1)) and \
                 check_knight(self.color, board, (1, 2)) and \
@@ -414,6 +305,7 @@ class King(Piece):
             if not knight_attack: 
                 return False
 
+            # Check diagonals for bishop/queen threats
             diags = check_diag_castle(self.color, board, (0, 4), (2, 0)) and \
                 check_diag_castle(self.color, board, (0, 5), (1, 0)) and \
                 check_diag_castle(self.color, board, (0, 4), (5, 7)) and \
@@ -421,6 +313,7 @@ class King(Piece):
             if not diags:
                 return False
 
+            # Check vertical/horizontal for rook/queen threats
             updowns = check_updown_castle(self.color, board, (0, 4), (7, 4)) and \
                 check_updown_castle(self.color, board, (0, 5), (7, 5))
             if not updowns: 
@@ -463,6 +356,7 @@ class Pawn(Piece):
 
     def is_valid_move(self, board, start, to):
         if self.color:
+            # diagonal move
             if abs(start[0] - to[0]) == 1 and to[1] - start[1] == 1:
                 if board.board[to[0]][to[1]] != None:
                     self.first_move = False
@@ -470,12 +364,14 @@ class Pawn(Piece):
                 print("Cannot move diagonally unless taking.")
                 return False
 
+            # vertical move
             if start[0] == to[0]:
                 if (start[1] - to[1] == 2 and self.first_move) or (start[1] - to[1] == 1):
                     for i in range(to[1] + 1, start[1]):
                         if board.board[start[0]][i] != None:
                             print(blocked_path)
                             return False
+                    # insert a GhostPawn
                     if start[1] - to[1] == 2:
                         board.board[start[0]][start[1] - 1] = GhostPawn(self.color)
                         board.white_ghost_piece = (start[0], start[1] - 1)
@@ -499,6 +395,7 @@ class Pawn(Piece):
                         if board.board[start[0]][i] != None:
                             print(blocked_path)
                             return False
+                    # insert a GhostPawn
                     if to[1] - start[1] == 2:
                         board.board[start[0]][start[1] + 1] = GhostPawn(self.color)
                         board.black_ghost_piece = (start[0], start[1] + 1)
