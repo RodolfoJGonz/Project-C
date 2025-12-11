@@ -3,19 +3,28 @@
     "turn": 1,
     "color": "white",
     "piece": "pawn",
-    "from": "c2",
-    "to": "c4",
+    "from": "h2",
+    "to": "h3",
     "action": "move",
-    "timestamp": "00:05:504"
+    "timestamp": "00:02:339"
   },
   {
     "turn": 1,
+    "color": "white",
+    "piece": "pawn",
+    "from": "h3",
+    "to": "h4",
+    "action": "move",
+    "timestamp": "00:02:440"
+  },
+  {
+    "turn": 2,
     "color": "black",
     "piece": "pawn",
-    "from": "e7",
-    "to": "e5",
+    "from": "c7",
+    "to": "c5",
     "action": "move",
-    "timestamp": "00:09:841"
+    "timestamp": "00:04:947"
   },
   {
     "turn": 2,
@@ -24,52 +33,70 @@
     "from": "b1",
     "to": "c3",
     "action": "move",
-    "timestamp": "00:15:413"
-  },
-  {
-    "turn": 2,
-    "color": "black",
-    "piece": "queen",
-    "from": "d8",
-    "to": "h4",
-    "action": "move",
-    "timestamp": "00:18:582"
-  },
-  {
-    "turn": 3,
-    "color": "white",
-    "piece": "pawn",
-    "from": "f2",
-    "to": "f3",
-    "action": "move",
-    "timestamp": "00:23:387"
+    "timestamp": "00:12:267"
   },
   {
     "turn": 3,
     "color": "black",
     "piece": "knight",
-    "from": "g8",
-    "to": "f6",
+    "from": "b8",
+    "to": "c6",
     "action": "move",
-    "timestamp": "00:28:258"
+    "timestamp": "00:15:777"
+  },
+  {
+    "turn": 3,
+    "color": "white",
+    "piece": "pawn",
+    "from": "b2",
+    "to": "b3",
+    "action": "move",
+    "timestamp": "00:19:655"
+  },
+  {
+    "turn": 4,
+    "color": "black",
+    "piece": "pawn",
+    "from": "g7",
+    "to": "g6",
+    "action": "move",
+    "timestamp": "00:26:407"
   },
   {
     "turn": 4,
     "color": "white",
     "piece": "pawn",
-    "from": "c4",
-    "to": "c5",
+    "from": "f2",
+    "to": "f3",
     "action": "move",
-    "timestamp": "00:34:129"
+    "timestamp": "00:29:215"
   },
   {
-    "turn": 4,
+    "turn": 5,
     "color": "black",
-    "piece": "queen",
-    "from": "h4",
-    "to": "a4",
+    "piece": "pawn",
+    "from": "e7",
+    "to": "e5",
     "action": "move",
-    "timestamp": "00:39:267"
+    "timestamp": "00:36:034"
+  },
+  {
+    "turn": 5,
+    "color": "white",
+    "piece": "bishop",
+    "from": "c1",
+    "to": "a3",
+    "action": "move",
+    "timestamp": "00:38:073"
+  },
+  {
+    "turn": 6,
+    "color": "black",
+    "piece": "pawn",
+    "from": "g6",
+    "to": "g5",
+    "action": "move",
+    "timestamp": "00:46:196"
   }
 ]
   

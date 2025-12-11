@@ -17,12 +17,11 @@ const ranks = ["8", "7", "6", "5", "4", "3", "2", "1"];
 function idx(square) {
   return { col: files.indexOf(square[0]), row: ranks.indexOf(square[1]) };
 }
-
 function pos(row, col) {
   return files[col] + ranks[row];
 }
 
-// Parse timestamps like "00:05:504"
+// Parse timestamps like "00:00:500"
 function parseTimestamp(ts) {
   if (!ts) return NaN;
   const parts = ts.split(":").map(Number);
@@ -31,35 +30,38 @@ function parseTimestamp(ts) {
   return mm * 60 + ss + ms / 1000;
 }
 
-// Format seconds → mm:ss.ms
+// Format for label
 function formatTime(t) {
   const m = Math.floor(t / 60);
   const s = Math.floor(t % 60);
   const ms = Math.floor((t % 1) * 1000);
-  return `${m}:${s.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+  return `${m}:${s.toString().padStart(2,"0")}.${ms.toString().padStart(3,"0")}`;
 }
 
 // DOM
 const boardEl = document.getElementById("board");
 const coordsLeftEl = document.getElementById("coords-left");
 const coordsBottomEl = document.getElementById("coords-bottom");
+
 const timeSlider = document.getElementById("time-slider");
 const timeLabel = document.getElementById("time-label");
+
 const btnReset = document.getElementById("btn-reset");
 const btnPrev = document.getElementById("btn-prev");
 const btnNext = document.getElementById("btn-next");
 const btnPlay = document.getElementById("btn-play");
 const btnPause = document.getElementById("btn-pause");
+
 const snapMoves = document.getElementById("snap-moves");
 const statusEl = document.getElementById("status");
 const logList = document.getElementById("move-log");
+
+const video = document.getElementById("chess-video");
 
 // State
 let squares = [];
 let boardState = {};
 let moves = [];
-let tCurrent = 0;
-let timer = null;
 let lastFrom = null, lastTo = null;
 
 // Build board
@@ -129,7 +131,7 @@ function renderBoard() {
   }
 }
 
-// Apply a move
+// Apply move
 function applyMove(mv) {
   const piece = boardState[mv.from];
   if (!piece) return;
@@ -139,9 +141,8 @@ function applyMove(mv) {
   lastTo = mv.to;
 }
 
-// Render at time
+// Render at given time (video controls this)
 function renderAtTime(t) {
-  tCurrent = t;
   timeSlider.value = t;
   timeLabel.textContent = formatTime(t);
 
@@ -153,78 +154,58 @@ function renderAtTime(t) {
   }
 
   renderBoard();
-  updateLogHighlight();
-}
-
-// Find current move index
-function currentMoveIndex() {
-  let idx = -1;
-  for (let i = 0; i < moves.length; i++) {
-    if (moves[i].t <= tCurrent) idx = i;
-    else break;
-  }
-  return idx;
+  updateLogHighlight(t);
 }
 
 // Highlight log
-function updateLogHighlight() {
-  const ci = currentMoveIndex();
+function updateLogHighlight(t) {
+  let idx = -1;
+  for (let i = 0; i < moves.length; i++) {
+    if (moves[i].t <= t) idx = i;
+  }
+
   [...logList.children].forEach((li, i) => {
-    li.classList.toggle("current", i === ci);
+    li.classList.toggle("current", i === idx);
   });
-  if (ci >= 0) logList.children[ci].scrollIntoView({ block: "nearest" });
+
+  if (idx >= 0) logList.children[idx].scrollIntoView({ block: "nearest" });
 }
 
-// Prev
-btnPrev.onclick = () => {
-  const ci = currentMoveIndex();
-  const target = Math.max(0, ci - 1);
-  renderAtTime(moves[target].t);
+// VIDEO → BOARD sync
+video.addEventListener("timeupdate", () => {
+  renderAtTime(video.currentTime);
+});
+
+// PLAY BUTTON sync
+btnPlay.onclick = () => video.play();
+btnPause.onclick = () => video.pause();
+
+// RESET sync
+btnReset.onclick = () => {
+  video.pause();
+  video.currentTime = 0;
+  renderAtTime(0);
 };
 
-// Next
+// NEXT / PREV sync
 btnNext.onclick = () => {
-  const ci = currentMoveIndex();
-  const target = Math.min(moves.length - 1, ci + 1);
-  renderAtTime(moves[target].t);
+  const t = video.currentTime;
+  let idx = moves.findIndex(m => m.t > t);
+  if (idx === -1) idx = moves.length - 1;
+  video.currentTime = moves[idx].t;
 };
 
-// Play
-btnPlay.onclick = () => {
-  if (timer) return;
-  timer = setInterval(() => {
-    const maxT = moves[moves.length - 1].t;
-    if (tCurrent >= maxT) return btnPause.onclick();
-    renderAtTime(tCurrent + 0.1);
-  }, 100);
+btnPrev.onclick = () => {
+  const t = video.currentTime;
+  let idx = moves.findIndex(m => m.t >= t) - 1;
+  if (idx < 0) idx = 0;
+  video.currentTime = moves[idx].t;
 };
 
-// Pause
-btnPause.onclick = () => {
-  clearInterval(timer);
-  timer = null;
-};
-
-// Reset
-btnReset.onclick = () => renderAtTime(0);
-
-// Slider
+// Slider manually controlling video
 timeSlider.oninput = () => {
   const val = parseFloat(timeSlider.value);
-  if (snapMoves.checked) {
-    let best = moves[0].t;
-    let bestd = Math.abs(val - best);
-    moves.forEach(m => {
-      const d = Math.abs(val - m.t);
-      if (d < bestd) {
-        best = m.t;
-        bestd = d;
-      }
-    });
-    renderAtTime(best);
-  } else {
-    renderAtTime(val);
-  }
+  video.currentTime = val;
 };
 
 // Load moves.json
@@ -234,25 +215,20 @@ async function init() {
     const raw = await res.json();
 
     let times = raw.map(m => parseTimestamp(m.timestamp));
-
-    // Fallback if timestamps missing
-    if (times.some(isNaN)) {
-      times = raw.map((_, i) => i * DEFAULT_DT);
-    }
+    if (times.some(isNaN)) times = raw.map((_, i) => i * DEFAULT_DT);
 
     moves = raw.map((m, i) => ({
       ...m,
       from: m.from.toLowerCase(),
       to: m.to.toLowerCase(),
-      t: times[i] // ⭐ DO NOT NORMALIZE — KEEP REAL TIMESTAMP
+      t: times[i]
     }));
 
     logList.innerHTML = "";
     moves.forEach((m, i) => {
       const li = document.createElement("li");
-      li.className = "move-item";
       li.textContent = `Turn ${m.turn} — ${m.color} ${m.piece}: ${m.from} → ${m.to}`;
-      li.onclick = () => renderAtTime(m.t);
+      li.onclick = () => (video.currentTime = m.t);
       logList.appendChild(li);
     });
 

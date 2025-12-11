@@ -3,28 +3,28 @@
     "turn": 1,
     "color": "white",
     "piece": "pawn",
-    "from": "e2",
-    "to": "e4",
+    "from": "h2",
+    "to": "h4",
     "action": "move",
-    "timestamp": "00:03:210"
+    "timestamp": "00:03:041"
   },
   {
     "turn": 1,
     "color": "black",
     "piece": "pawn",
-    "from": "e7",
-    "to": "e5",
+    "from": "c7",
+    "to": "c5",
     "action": "move",
-    "timestamp": "00:06:744"
+    "timestamp": "00:05:381"
   },
   {
     "turn": 2,
     "color": "white",
     "piece": "knight",
-    "from": "g1",
-    "to": "f3",
+    "from": "b1",
+    "to": "c3",
     "action": "move",
-    "timestamp": "00:10:501"
+    "timestamp": "00:12:702"
   },
   {
     "turn": 2,
@@ -33,16 +33,16 @@
     "from": "b8",
     "to": "c6",
     "action": "move",
-    "timestamp": "00:14:003"
+    "timestamp": "00:16:212"
   },
   {
     "turn": 3,
     "color": "white",
-    "piece": "bishop",
-    "from": "f1",
-    "to": "c4",
+    "piece": "pawn",
+    "from": "b2",
+    "to": "b3",
     "action": "move",
-    "timestamp": "00:18:552"
+    "timestamp": "00:20:089"
   },
   {
     "turn": 3,
@@ -51,132 +51,69 @@
     "from": "g7",
     "to": "g6",
     "action": "move",
-    "timestamp": "00:22:315"
+    "timestamp": "00:26:909"
   },
   {
     "turn": 4,
     "color": "white",
-    "piece": "queen",
-    "from": "d1",
+    "piece": "pawn",
+    "from": "f2",
     "to": "f3",
     "action": "move",
-    "timestamp": "00:27:044"
+    "timestamp": "00:29:650"
   },
   {
     "turn": 4,
     "color": "black",
-    "piece": "bishop",
-    "from": "f8",
-    "to": "g7",
+    "piece": "pawn",
+    "from": "e7",
+    "to": "e5",
     "action": "move",
-    "timestamp": "00:31:882"
+    "timestamp": "00:36:469"
   },
   {
     "turn": 5,
-    "color": "white",
-    "piece": "pawn",
-    "from": "d2",
-    "to": "d3",
-    "action": "move",
-    "timestamp": "00:36:550"
-  },
-  {
-    "turn": 5,
-    "color": "black",
-    "piece": "pawn",
-    "from": "d7",
-    "to": "d6",
-    "action": "move",
-    "timestamp": "00:41:211"
-  },
-  {
-    "turn": 6,
     "color": "white",
     "piece": "bishop",
     "from": "c1",
-    "to": "g5",
+    "to": "a3",
     "action": "move",
-    "timestamp": "00:46:920"
+    "timestamp": "00:38:508"
   },
   {
-    "turn": 6,
-    "color": "black",
-    "piece": "knight",
-    "from": "g8",
-    "to": "e7",
-    "action": "move",
-    "timestamp": "00:50:602"
-  },
-  {
-    "turn": 7,
-    "color": "white",
-    "piece": "knight",
-    "from": "b1",
-    "to": "c3",
-    "action": "move",
-    "timestamp": "00:55:337"
-  },
-  {
-    "turn": 7,
-    "color": "black",
-    "piece": "pawn",
-    "from": "h7",
-    "to": "h6",
-    "action": "move",
-    "timestamp": "01:00:114"
-  },
-  {
-    "turn": 8,
-    "color": "white",
-    "piece": "bishop",
-    "from": "g5",
-    "to": "h4",
-    "action": "move",
-    "timestamp": "01:04:881"
-  },
-  {
-    "turn": 8,
+    "turn": 5,
     "color": "black",
     "piece": "pawn",
     "from": "g6",
     "to": "g5",
     "action": "move",
-    "timestamp": "01:09:742"
+    "timestamp": "00:46:631"
   },
   {
-    "turn": 9,
+    "turn": 6,
     "color": "white",
     "piece": "bishop",
-    "from": "c4",
-    "to": "f7",
+    "from": "a3",
+    "to": "c5",
     "action": "capture",
-    "timestamp": "01:14:331"
+    "timestamp": "00:49:472"
   },
   {
-    "turn": 9,
+    "turn": 6,
     "color": "black",
-    "piece": "king",
-    "from": "e8",
-    "to": "f7",
+    "piece": "bishop",
+    "from": "f8",
+    "to": "c5",
     "action": "capture",
-    "timestamp": "01:18:902"
+    "timestamp": "00:55:021"
   },
   {
-    "turn": 10,
+    "turn": 7,
     "color": "white",
-    "piece": "queen",
-    "from": "f3",
-    "to": "h5",
-    "action": "move",
-    "timestamp": "01:23:551"
-  },
-  {
-    "turn": 10,
-    "color": "black",
-    "piece": "knight",
-    "from": "e7",
-    "to": "g6",
-    "action": "move",
-    "timestamp": "01:28:266"
+    "piece": "pawn",
+    "from": "h4",
+    "to": "g5",
+    "action": "capture",
+    "timestamp": "00:58:230"
   }
 ]

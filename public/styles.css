@@ -10,13 +10,31 @@ h1 {
   margin-bottom: 20px;
 }
 
+/* LAYOUT — now includes video on the left, board center, log right */
 .layout {
   display: flex;
   justify-content: center;
   align-items: flex-start;
   gap: 40px;
+  margin-top: 20px;
 }
 
+/* VIDEO PANEL */
+#video-panel {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#chess-video {
+  width: 500px;
+  height: 400px;
+  object-fit: cover; 
+  border: 1px solid black;
+  border-radius: 6px;
+}
+
+/* CHESS CONTAINER STAYS SAME */
 #chess-container {
   display: grid;
   grid-template-columns: 30px 400px;
