@@ -1,10 +1,4 @@
 venv/
-main/runs
-main/yolo11n.pt
-*.pt
 *.jpg
 *.png
 *.sh
-Chess Pieces 2.v5i.yolov11/
-dataset_yolov11/
-Videos/
