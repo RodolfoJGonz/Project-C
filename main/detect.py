@@ -144,57 +144,13 @@ def four_point_transform(frame, pts, padding_percent=PADDING):
     return warped, M, padding_info
 
 
-# 8x8 grid on warped board
-def create_grid_overlay(frame, grid_size=8, padding_percent=PADDING):
-    h, w = frame.shape[:2]
-
-    # Calculate padding in pixels consistent with get_square_centers
-    padding_h = h * padding_percent / (1 + 2 * padding_percent)
-    padding_w = w * padding_percent / (1 + 2 * padding_percent)
-
-    board_h = h - 2 * padding_h
-    board_w = w - 2 * padding_w
-
-    square_h = board_h / grid_size
-    square_w = board_w / grid_size
-
-    overlay = frame.copy()
-
-    for i in range(1, grid_size):
-        x = int(padding_w + i * square_w)
-        y = int(padding_h + i * square_h)
-
-        # Vertical lines
-        cv2.line(overlay, (x, int(padding_h)), (x, int(h - padding_h)), (0, 255, 0), 2)
-        # Horizontal lines
-        cv2.line(overlay, (int(padding_w), y), (int(w - padding_w), y), (0, 255, 0), 2)
-
-    # Draw border around actual board area
-    cv2.rectangle(
-        overlay,
-        (int(padding_w), int(padding_h)),
-        (int(w - padding_w), int(h - padding_h)),
-        (255, 0, 0),
-        2,
-    )
-
-    return overlay
-
-
 # Detect corners -> create warped board
 def build_grid(
     frame,
-    corner_model_path="../models/corners/best.pt",
-    visualize=False,
+    corner_model_path="path/to/corner/model",
     padding_percent=PADDING,
     shrink_corners_percent=0.0,
 ):
-    """
-    Detect corners and create warped board view.
-
-    Returns:
-        (corners, warped, transform_matrix, padding_info) or (None, None, None, None)
-    """
     model = YOLO(corner_model_path)
     corners = detect_corners(frame, model, shrink_percent=shrink_corners_percent)
 
@@ -205,19 +161,6 @@ def build_grid(
     warped, transform_matrix, padding_info = four_point_transform(
         frame, corners, padding_percent
     )
-
-    if visualize:
-        grid_overlay = create_grid_overlay(warped, padding_percent=padding_percent)
-        try:
-            cv2.imshow(
-                "Calibrated Board with Grid", cv2.resize(grid_overlay, (1280, 720))
-            )
-        except Exception:
-            cv2.imshow("Calibrated Board with Grid", grid_overlay)
-        print("Calibration successful!")
-        print(f"Corners: {corners}")
-        print(f"Warped size: {warped.shape[:2]}")
-        print(f"Padding: {padding_info['padding_w']}px x {padding_info['padding_h']}px")
 
     return corners, warped, transform_matrix, padding_info
 
@@ -231,7 +174,7 @@ def get_square_centers(warp, grid_size=8, padding_percent=PADDING):
     padding_h = h * padding_percent / (1 + 2 * padding_percent)
     padding_w = w * padding_percent / (1 + 2 * padding_percent)
 
-    # Board dimensions (excluding padding)
+    # Board dimensions
     board_h = h - 2 * padding_h
     board_w = w - 2 * padding_w
 
@@ -246,24 +189,6 @@ def get_square_centers(warp, grid_size=8, padding_percent=PADDING):
             centers[r, c] = [cx, cy]
 
     return centers
-
-
-# For snapping bounding box bottom centers to square centers
-def snap_to_square_nearest(x1, y1, x2, y2, centers, use_bottom_center=True):
-    if use_bottom_center:
-        px = (x1 + x2) / 2.0
-        py = float(y2)
-    else:
-        px = (x1 + x2) / 2.0
-        py = (y1 + y2) / 2.0
-
-    distances = np.sum((centers - [px, py]) ** 2, axis=2)
-    min_idx = np.unravel_index(np.argmin(distances), distances.shape)
-
-    row, col = min_idx
-    assigned_center = tuple(centers[row, col])
-
-    return row, col, assigned_center
 
 
 # only rules we need is to keep one piece per square
@@ -293,7 +218,7 @@ def model_detect(
     corners,
     padding_info,
     transform_matrix,
-    piece_model_path="../models/pieces/best.pt",
+    piece_model_path="path/to/piece/model",
     conf_threshold=0.3,
     iou=0.7,
     visualize=True,
@@ -405,10 +330,9 @@ def model_detect(
             {"notation": notation, "conf": p["conf"], "cls": p["cls"]}
         )
 
-    # Visualize on warped board and original
+    # Visualize on original frame
     if visualize:
         try:
-            # visualize_detections(warp, pieces, class_names, padding_percent)
             if len(final_output) > 0:
                 visualize_on_original(
                     frame, viz_bboxes, viz_centers_orig, final_pieces_for_vis
@@ -417,52 +341,6 @@ def model_detect(
             print("Visualization failed:", e)
 
     return pieces, output_array
-
-
-# More for debugging. visualizing detections to warped grid
-def visualize_detections(warp, pieces, class_names, padding_percent=PADDING):
-    vis = warp.copy()
-    h, w = warp.shape[:2]
-
-    padding_h = h * padding_percent / (1 + 2 * padding_percent)
-    padding_w = w * padding_percent / (1 + 2 * padding_percent)
-
-    board_h = h - 2 * padding_h
-    board_w = w - 2 * padding_w
-
-    square_w = board_w / 8
-    square_h = board_h / 8
-
-    # consistent colors per class
-    np.random.seed(50)
-    colors = {i: tuple(np.random.randint(0, 256, 3).tolist()) for i in range(12)}
-
-    for p in pieces:
-        r, c = p["row"], p["col"]
-
-        x1 = int(padding_w + c * square_w)
-        y1 = int(padding_h + r * square_h)
-        x2 = int(padding_w + (c + 1) * square_w)
-        y2 = int(padding_h + (r + 1) * square_h)
-
-        cls_id = p.get("cls", 0)
-        color = colors.get(cls_id, (0, 255, 0))
-        label = (
-            f"{class_names[cls_id]} {p['conf']:.2f}"
-            if cls_id in class_names
-            else f"{p['conf']:.2f}"
-        )
-
-        cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(
-            vis, label, (x1 + 5, y1 + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1
-        )
-
-    try:
-        resized_vis = cv2.resize(vis, (1920, 1080), interpolation=cv2.INTER_LINEAR)
-        cv2.imshow("Detections (Warped)", resized_vis)
-    except Exception:
-        cv2.imshow("Detections (Warped)", vis)
 
 
 # Prints some debugging info
@@ -570,10 +448,10 @@ def save_move_history(file_name, history):
     try:
         with open(output_dest, "w") as f:
             json.dump(history, f, indent=2)
-        print(f"✓ Move history saved to {output_dest}")
-        print(f"  Total moves recorded: {len(history)}")
+        print(f"Move history saved to {output_dest}")
+        print(f"Total moves recorded: {len(history)}")
     except Exception as e:
-        print(f"✗ Failed to save move history: {e}")
+        print(f"Failed to save move history: {e}")
 
 
 # building moves that get input into move_history
@@ -626,7 +504,7 @@ def main():
     T = 1
     WINDOW_SIZE = 10
     stable_flag = True
-    window = np.array([])
+    window = np.zeros(WINDOW_SIZE)
     stable_frames = []
     output_array = []
 
@@ -642,7 +520,7 @@ def main():
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
-            print("Stream End?. Exiting ...")
+            print("Stream End. Exiting...")
             break
 
         if frame_num == 0:
@@ -652,13 +530,12 @@ def main():
             corners, warped, transform_matrix, padding_info = build_grid(
                 frame,
                 corner_model_path=CORNER_MODEL,
-                visualize=False,
                 padding_percent=PADDING,
                 shrink_corners_percent=0.0,
             )
 
         if warped is None:
-            print("✗ Failed to detect board")
+            print("Failed to detect board")
             return
 
         # Assign previous binary array before overriding output_array
@@ -702,216 +579,211 @@ def main():
 
         # Sliding window
         win_sum = 0
-        if len(window) < WINDOW_SIZE:
-            # building initial window
-            window = np.append(window, x)
-        else:
-            # update window
-            win_sum = np.sum(window)
-            # If stable flag is true, we keep going until a frame of magnitude 1 is added to window
-            if win_sum < T and stable_flag and x > 0:
-                stable_flag = False
+        # update window
+        win_sum = np.sum(window)
+        # If stable flag is true, we keep going until a frame of magnitude 1 is added to window
+        if win_sum < T and stable_flag and x > 0:
+            stable_flag = False
+        # If the sum of the window elements is less than 1 and the stable flag is false
+        elif (
+            win_sum < T
+            and not stable_flag
+            and (
+                np.sum(output_array) == max_pieces
+                or np.sum(output_array) == max_pieces - 1
+            )
+        ):
+            # Pick a frame and set flag to True
+            stable_dif = np.subtract(output_array, stable_frames[-1]["array"])
 
-            # If the sum of the window elements is less than 1 and the stable flag is false
-            elif (
-                win_sum < T
-                and not stable_flag
-                and (
-                    np.sum(output_array) == max_pieces
-                    or np.sum(output_array) == max_pieces - 1
-                )
-            ):
-                # Pick a frame and set flag to True
-                stable_dif = np.subtract(output_array, stable_frames[-1]["array"])
+            if (stable_dif != ZERO_ARRAY).any():
+                # Normal move Scenario
+                if np.sum(stable_dif) == 0 and np.sum(abs(stable_dif)) == 2:
+                    # ignore frame if amount of pieces detected is not equal to max_pieces
+                    if np.sum(output_array) != max_pieces:
+                        frame_num += 1
+                        continue
 
-                if (stable_dif != ZERO_ARRAY).any():
-                    # Normal move Scenario
-                    if np.sum(stable_dif) == 0 and np.sum(abs(stable_dif)) == 2:
-                        # ignore frame if amount of pieces detected is not equal to max_pieces
-                        if np.sum(output_array) != max_pieces:
-                            frame_num += 1
-                            continue
-
-                        print("\nNORMAL MOVE: ")
-                        # constructing stable frame item
-                        item = {
-                            "frame_number": frame_num,
-                            "array": output_array,
-                            "mask": stable_dif,
-                        }
-                        # Process move in python-chess board
-                        uci_move = infer_move_from_masks(stable_dif)
-                        if uci_move:
-                            try:
-                                move = chess.Move.from_uci(uci_move)
-                                if move in engine_board.legal_moves:
-                                    turn_color = (
-                                        "w" if engine_board.turn == chess.WHITE else "b"
+                    print("\nNORMAL MOVE: ")
+                    # constructing stable frame item
+                    item = {
+                        "frame_number": frame_num,
+                        "array": output_array,
+                        "mask": stable_dif,
+                    }
+                    # Process move in python-chess board
+                    uci_move = infer_move_from_masks(stable_dif)
+                    if uci_move:
+                        try:
+                            move = chess.Move.from_uci(uci_move)
+                            if move in engine_board.legal_moves:
+                                turn_color = (
+                                    "w" if engine_board.turn == chess.WHITE else "b"
+                                )
+                                timestamp = calculate_time(video_fps, frame_num)
+                                d_square = move.to_square
+                                d_note = chess.square_name(d_square)
+                                f_square = move.from_square
+                                f_note = chess.square_name(f_square)
+                                piece_type = engine_board.piece_type_at(f_square)
+                                history.append(
+                                    build_move(
+                                        "move",
+                                        engine_board,
+                                        timestamp,
+                                        turn_color,
+                                        f_note,
+                                        d_note,
+                                        piece_type,
                                     )
-                                    timestamp = calculate_time(video_fps, frame_num)
-                                    d_square = move.to_square
-                                    d_note = chess.square_name(d_square)
-                                    f_square = move.from_square
-                                    f_note = chess.square_name(f_square)
-                                    piece_type = engine_board.piece_type_at(f_square)
-                                    history.append(
-                                        build_move(
-                                            "move",
-                                            engine_board,
-                                            timestamp,
-                                            turn_color,
-                                            f_note,
-                                            d_note,
-                                            piece_type,
-                                        )
-                                    )
-                                    san_move = engine_board.san(move)
-                                    # This updates ALL FEN variables
-                                    engine_board.push(move)
-                                    # prints board and move in FEN notation
-                                    print(f"Move: {san_move}")
-                                    print(f"Current FEN: {engine_board.fen()}")
-                                    print(engine_board)
-                                else:
-                                    print(
-                                        f"Detected move {uci_move} is illegal for {engine_board.turn}"
-                                    )
-                            except ValueError:
-                                print(f"Error converting UCI move: {uci_move}")
-                        else:
-                            print("Could not infer simple move from mask")
+                                )
+                                san_move = engine_board.san(move)
+                                # This updates ALL FEN variables
+                                engine_board.push(move)
+                                # prints board and move in FEN notation
+                                print(f"Move: {san_move}")
+                                print(f"Current FEN: {engine_board.fen()}")
+                                print(engine_board)
+                            else:
+                                print(
+                                    f"Detected move {uci_move} is illegal for {engine_board.turn}"
+                                )
+                        except ValueError:
+                            print(f"Error converting UCI move: {uci_move}")
+                    else:
+                        print("Could not infer simple move from mask")
 
-                        # After processing and updating board, store stable frame
-                        stable_frames.append(item)
+                    # After processing and updating board, store stable frame
+                    stable_frames.append(item)
 
-                    # Capture Scenario
-                    elif np.sum(stable_dif) == -1:
-                        # Ignore frame if binary array is not equal to max_piece-1
-                        if np.sum(output_array) != max_pieces - 1:
-                            frame_num += 1
-                            continue
+                # Capture Scenario
+                elif np.sum(stable_dif) == -1:
+                    # Ignore frame if binary array is not equal to max_piece-1
+                    if np.sum(output_array) != max_pieces - 1:
+                        frame_num += 1
+                        continue
 
-                        print("\nCAPTURE MOVE: ")
-                        item = {
-                            "frame_number": frame_num,
-                            "array": output_array,
-                            "mask": stable_dif,
-                        }
-                        uci_move = infer_move_from_masks(stable_dif)
-                        origin_square = chess.parse_square(str(uci_move))
-                        piece = engine_board.piece_at(origin_square)
+                    print("\nCAPTURE MOVE: ")
+                    item = {
+                        "frame_number": frame_num,
+                        "array": output_array,
+                        "mask": stable_dif,
+                    }
+                    uci_move = infer_move_from_masks(stable_dif)
+                    origin_square = chess.parse_square(str(uci_move))
+                    piece = engine_board.piece_at(origin_square)
 
-                        # all moves available for piece on origin_square
-                        matching_moves = []
-                        for move in engine_board.legal_moves:
-                            if move.from_square == origin_square:
-                                matching_moves.append(move)
+                    # all moves available for piece on origin_square
+                    matching_moves = []
+                    for move in engine_board.legal_moves:
+                        if move.from_square == origin_square:
+                            matching_moves.append(move)
 
-                        # Possible Moves
-                        dest_coords = []
-                        for move in matching_moves:
-                            d_square = move.to_square
-                            d_note = chess.square_name(d_square)
-                            row_col = to_row_col(d_note)
-                            row_col = game_to_mat_coords(row_col)
-                            dest_coords.append(
-                                {
-                                    "move": move.uci(),
-                                    "dest_alg": d_note,
-                                    "row_col": row_col,
-                                }
-                            )
+                    # Possible Moves
+                    dest_coords = []
+                    for move in matching_moves:
+                        d_square = move.to_square
+                        d_note = chess.square_name(d_square)
+                        row_col = to_row_col(d_note)
+                        row_col = game_to_mat_coords(row_col)
+                        dest_coords.append(
+                            {
+                                "move": move.uci(),
+                                "dest_alg": d_note,
+                                "row_col": row_col,
+                            }
+                        )
 
-                        # Coordinates for end destination of possible moves
-                        # Pick bounding boxes
-                        occupied = []
-                        for coord in dest_coords:
-                            for piece in output:
-                                if (
-                                    piece["row"] == coord["row_col"][0]
-                                    and piece["col"] == coord["row_col"][1]
-                                ):
-                                    occupied.append((piece, coord))
+                    # Coordinates for end destination of possible moves
+                    # Pick bounding boxes
+                    occupied = []
+                    for coord in dest_coords:
+                        for piece in output:
+                            if (
+                                piece["row"] == coord["row_col"][0]
+                                and piece["col"] == coord["row_col"][1]
+                            ):
+                                occupied.append((piece, coord))
 
-                        # If there are no capture moves available, ignore frame
-                        if len(occupied) == 0:
-                            frame_num += 1
-                            continue
+                    # If there are no capture moves available, ignore frame
+                    if len(occupied) == 0:
+                        frame_num += 1
+                        continue
 
-                        valid_capture = None
-                        turn_color = "w" if engine_board.turn == chess.WHITE else "b"
-                        # If there is 1 capture move, thats the valid move
-                        if len(occupied) == 1:
-                            x1, y1, x2, y2 = occupied[0][0]["orig_bbox"]
+                    valid_capture = None
+                    turn_color = "w" if engine_board.turn == chess.WHITE else "b"
+                    # If there is 1 capture move, thats the valid move
+                    if len(occupied) == 1:
+                        x1, y1, x2, y2 = occupied[0][0]["orig_bbox"]
+                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+
+                        cropped = frame[y1:y2, x1:x2]
+                        color = detect_color(cropped)
+                        if color == turn_color:
+                            valid_capture = occupied[0]
+
+                    # If more than 1, iterate through them and do a color check
+                    # to see where our capturing piece went
+                    else:
+                        for piece in occupied:
+                            x1, y1, x2, y2 = piece[0]["orig_bbox"]
                             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
 
                             cropped = frame[y1:y2, x1:x2]
                             color = detect_color(cropped)
                             if color == turn_color:
-                                valid_capture = occupied[0]
+                                valid_capture = piece
+                                break
 
-                        # If more than 1, iterate through them and do a color check
-                        # to see where our capturing piece went
-                        else:
-                            for piece in occupied:
-                                x1, y1, x2, y2 = piece[0]["orig_bbox"]
-                                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-
-                                cropped = frame[y1:y2, x1:x2]
-                                color = detect_color(cropped)
-                                if color == turn_color:
-                                    valid_capture = piece
-                                    break
-
-                        # If valid move is found, process move
-                        if valid_capture is not None:
-                            move = chess.Move.from_uci(valid_capture[1]["move"])
-                            timestamp = calculate_time(video_fps, frame_num)
-                            d_square = move.to_square
-                            d_note = chess.square_name(d_square)
-                            f_square = move.from_square
-                            f_note = chess.square_name(f_square)
-                            piece_type = engine_board.piece_type_at(f_square)
-                            history.append(
-                                build_move(
-                                    "capture",
-                                    engine_board,
-                                    timestamp,
-                                    turn_color,
-                                    f_note,
-                                    d_note,
-                                    piece_type,
-                                )
+                    # If valid move is found, process move
+                    if valid_capture is not None:
+                        move = chess.Move.from_uci(valid_capture[1]["move"])
+                        timestamp = calculate_time(video_fps, frame_num)
+                        d_square = move.to_square
+                        d_note = chess.square_name(d_square)
+                        f_square = move.from_square
+                        f_note = chess.square_name(f_square)
+                        piece_type = engine_board.piece_type_at(f_square)
+                        history.append(
+                            build_move(
+                                "capture",
+                                engine_board,
+                                timestamp,
+                                turn_color,
+                                f_note,
+                                d_note,
+                                piece_type,
                             )
-                            san_move = engine_board.san(move)
-                            engine_board.push(move)  # This updates ALL FEN variables
-                            print(f"Move: {san_move}")
-                            print(
-                                "Current FEN:",
-                                engine_board.fen(),
-                            )
-                            print(engine_board)
+                        )
+                        san_move = engine_board.san(move)
+                        engine_board.push(move)  # This updates ALL FEN variables
+                        print(f"Move: {san_move}")
+                        print(
+                            "Current FEN:",
+                            engine_board.fen(),
+                        )
+                        print(engine_board)
 
-                        # if no valid move is found, skip frame
-                        else:
-                            frame_num += 1
-                            continue
-
-                        # Store stable frame and decrease piece max capture happened
-                        stable_frames.append(item)
-                        max_pieces -= 1
-
-                        if engine_board.is_checkmate() or engine_board.is_stalemate():
-                            print("GAME DONE")
-
+                    # if no valid move is found, skip frame
                     else:
-                        print("INVALID MOVE DETECTED\n")
+                        frame_num += 1
+                        continue
 
-                stable_flag = True
+                    # Store stable frame and decrease piece max capture happened
+                    stable_frames.append(item)
+                    max_pieces -= 1
 
-            # update window
-            window = np.delete(window, 0)
-            window = np.append(window, x)
+                    if engine_board.is_checkmate() or engine_board.is_stalemate():
+                        print("GAME DONE")
+
+                else:
+                    print("INVALID MOVE DETECTED\n")
+
+            stable_flag = True
+
+        # update window
+        window = np.delete(window, 0)
+        window = np.append(window, x)
 
         # Prints Debugging Info
         # debugging(x, window, WINDOW_SIZE, win_sum, stable_flag)
