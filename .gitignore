@@ -2,3 +2,7 @@ node_modules/
 .DS_Store
 .env
 npm-debug.log
+venv/
+*.jpg
+*.png
+*.sh
