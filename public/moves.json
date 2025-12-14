@@ -1,0 +1,119 @@
+[
+  {
+    "turn": 1,
+    "color": "white",
+    "piece": "pawn",
+    "from": "h2",
+    "to": "h4",
+    "action": "move",
+    "timestamp": "00:03:041"
+  },
+  {
+    "turn": 1,
+    "color": "black",
+    "piece": "pawn",
+    "from": "c7",
+    "to": "c5",
+    "action": "move",
+    "timestamp": "00:05:381"
+  },
+  {
+    "turn": 2,
+    "color": "white",
+    "piece": "knight",
+    "from": "b1",
+    "to": "c3",
+    "action": "move",
+    "timestamp": "00:12:702"
+  },
+  {
+    "turn": 2,
+    "color": "black",
+    "piece": "knight",
+    "from": "b8",
+    "to": "c6",
+    "action": "move",
+    "timestamp": "00:16:212"
+  },
+  {
+    "turn": 3,
+    "color": "white",
+    "piece": "pawn",
+    "from": "b2",
+    "to": "b3",
+    "action": "move",
+    "timestamp": "00:20:089"
+  },
+  {
+    "turn": 3,
+    "color": "black",
+    "piece": "pawn",
+    "from": "g7",
+    "to": "g6",
+    "action": "move",
+    "timestamp": "00:26:909"
+  },
+  {
+    "turn": 4,
+    "color": "white",
+    "piece": "pawn",
+    "from": "f2",
+    "to": "f3",
+    "action": "move",
+    "timestamp": "00:29:650"
+  },
+  {
+    "turn": 4,
+    "color": "black",
+    "piece": "pawn",
+    "from": "e7",
+    "to": "e5",
+    "action": "move",
+    "timestamp": "00:36:469"
+  },
+  {
+    "turn": 5,
+    "color": "white",
+    "piece": "bishop",
+    "from": "c1",
+    "to": "a3",
+    "action": "move",
+    "timestamp": "00:38:508"
+  },
+  {
+    "turn": 5,
+    "color": "black",
+    "piece": "pawn",
+    "from": "g6",
+    "to": "g5",
+    "action": "move",
+    "timestamp": "00:46:631"
+  },
+  {
+    "turn": 6,
+    "color": "white",
+    "piece": "bishop",
+    "from": "a3",
+    "to": "c5",
+    "action": "capture",
+    "timestamp": "00:49:472"
+  },
+  {
+    "turn": 6,
+    "color": "black",
+    "piece": "bishop",
+    "from": "f8",
+    "to": "c5",
+    "action": "capture",
+    "timestamp": "00:55:021"
+  },
+  {
+    "turn": 7,
+    "color": "white",
+    "piece": "pawn",
+    "from": "h4",
+    "to": "g5",
+    "action": "capture",
+    "timestamp": "00:58:230"
+  }
+]
