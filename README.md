@@ -1,2 +1,255 @@
-# Knight Vision 
-Senior Project for UTRGV Fall 2025
+
+# Knight Vision – Real-to-Digital Chess Game Reconstruction
+
+**Senior Project – UTRGV Fall 2025**
+
+Knight Vision is a computer vision system that automatically recognizes and reconstructs a chess game from video footage. Given a video of a real chessboard, the system detects the board, identifies piece locations frame‑by‑frame, infers moves (including captures), and reconstructs the game using legal chess rules. Detected moves are exported in a structured JSON format for visualization or web integration.
+
+This project combines **YOLO‑based object detection**, **geometric homography**, and **python‑chess** to bridge real‑world chess games with digital game representations.
+
+----------
+
+##  Key Features
+
+-   Detects chessboard corners and warps the board into a top‑down view
+    
+-   Detects chess pieces using a YOLO model
+    
+-   Snaps detected pieces to an 8×8 chess grid
+    
+-   Tracks board state changes over time using binary occupancy matrices
+    
+-   Infers **normal moves** and **capture moves** automatically
+    
+-   Validates moves using `python-chess`
+    
+-   Exports move history with timestamps to JSON
+    
+-   Visualizes detections and snapped square assignments
+    
+
+
+##  How It Works 
+
+1.  **Corner Detection**  
+    A YOLOv11 Nano model detects the four corners of the chessboard in the first frame.
+    
+2.  **Perspective Warp**  
+    A homography transforms the board into a top‑down warped image with padding.
+    
+3.  **Square Center Generation**  
+    The warped board is divided into an 8×8 grid and square centers are computed.
+    
+4.  **Piece Detection**  
+    A YOLOv11 Small model detects chess pieces in the original frame.
+    
+5.  **Grid Snapping**  
+    Each detected piece is mapped to the nearest square center in the warped board.
+    
+6.  **Stable Frame Selection**  
+    A sliding window tracks detection changes to isolate stable board states.
+    
+7.  **Move Inference**  
+    Differences between stable board states are used to infer:
+    
+    -   Normal moves
+        
+    -   Capture moves
+        
+8.  **Rule Validation**  
+    All inferred moves are validated using `python-chess`.
+    
+9.  **Export & Visualization**
+    
+    -   Moves are saved to `output/moves.json`
+        
+    -   Visual overlays show bounding boxes
+        
+
+
+
+## Repository Structure
+
+```
+Project-C/
+├── main/
+  ├── detect.py           # Main detection and game reconstruction script
+├── models/             # YOLO corner and piece models
+  ├── corners/
+  ├── pieces/
+├── Videos/
+├── output/             # Generated outputs (e.g., moves.json)
+├── requirements.txt    # Python dependencies
+└── README.md
+```
+
+
+
+##  Requirements
+
+-   Python **3.8+**
+    
+-   OpenCV
+    
+-   NumPy
+    
+-   Ultralytics YOLO
+    
+-   python‑chess
+    
+-   Matplotlib
+    
+
+Install dependencies with:
+
+```bash
+pip install -r requirements.txt
+```
+
+
+
+## Running the Project
+
+### 1. Prepare Required Assets
+
+*Default Models and Sample Video Included.*
+
+You must provide:
+
+-   A **video file** of a chess game
+    
+-   A YOLO model trained to detect **board corners**
+    
+-   A YOLO model trained to detect **chess pieces**
+    
+
+Place models in the `models/` directory (or update paths accordingly).
+
+----------
+
+### 2. Configure Paths
+
+Edit the following variables in `detect.py`:
+
+```python
+VIDEO_PATH = "path/to/video"
+CORNER_MODEL = "path/to/corner/model"
+PIECE_MODEL = "path/to/piece/model"
+```
+
+Example:
+
+```python
+VIDEO_PATH = "Videos/14.mp4"
+CORNER_MODEL = "models/corners/best.pt"
+PIECE_MODEL = "models/pieces/best.pt"
+```
+
+----------
+
+### 3. Run the Script
+
+```bash
+python detect.py
+```
+
+Controls:
+
+-   Press **Q** to quit early
+    
+
+
+
+##  Output
+
+### Move History
+
+Moves are saved to:
+
+```
+output/moves.json
+```
+
+Each move entry includes:
+
+```json
+{
+  "turn": 12,
+  "color": "white",
+  "piece": "pawn",
+  "from": "e2",
+  "to": "e4",
+  "action": "move",
+  "timestamp": "01:23:456"
+}
+```
+
+### Visualization
+
+-   Bounding boxes around detected pieces
+    
+-   Live OpenCV display of the original frame
+    
+-   Graph of detection change magnitude over time
+    
+
+
+## Chess Logic
+
+-   Uses `python-chess` for:
+    
+    -   Legal move validation
+        
+    -   Turn tracking
+        
+    -   FEN updates
+        
+    -   Game termination (checkmate / stalemate)
+        
+-   Supports:
+    
+    -   Normal moves
+        
+    -   Capture moves
+        
+
+
+## Limitations & Future Work
+
+-   Requires well‑lit, stable camera footage
+    
+-   YOLO models must be trained separately
+    
+-   Does not currently support (Can be implemented with python-chess):
+    
+    -   Castling
+        
+    -   En passant
+        
+    -   Pawn promotion
+        
+-   Performance depends heavily on detection accuracy
+    
+
+Planned improvements:
+    
+-   Support for special chess rules
+    
+-   Real‑time processing optimizations
+        
+
+
+##  Author
+
+**Rodolfo Gonzalez**  
+Computer Science  
+
+**Jade Aviso**  
+Computer Science  
+
+**Luis Ramirez**  
+Computer Science  
+
+**Andres Alviar**  
+Computer Science  
+
